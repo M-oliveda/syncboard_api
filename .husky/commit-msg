@@ -1,0 +1,38 @@
+# Gitmoji commit message validation
+# Format: :emoji: message (max 50 characters)
+
+commit_msg_file=$1
+commit_msg=$(cat "$commit_msg_file")
+
+# Regex pattern for Gitmoji commits
+# :emoji: Message starting with uppercase (1-50 characters)
+gitmoji_pattern="^:[a-z_]+: [A-Z].{0,49}$"
+
+if ! echo "$commit_msg" | grep -qE "$gitmoji_pattern"; then
+  echo "❌ Invalid commit message format!"
+  echo ""
+  echo "Expected format: :emoji: Message"
+  echo "Message must start with uppercase and be max 50 characters"
+  echo ""
+  echo "Examples:"
+  echo "  :sparkles: Add user authentication"
+  echo "  :bug: Fix token validation issue"
+  echo "  :memo: Update README with setup instructions"
+  echo "  :recycle: Refactor file service"
+  echo "  :zap: Improve query performance"
+  echo ""
+  echo "Common Gitmojis:"
+  echo "  ✨ :sparkles:  - New feature"
+  echo "  🐛 :bug:       - Bug fix"
+  echo "  📝 :memo:      - Documentation"
+  echo "  🎨 :art:       - Code style/format"
+  echo "  ♻️  :recycle:   - Refactoring"
+  echo "  ⚡ :zap:       - Performance"
+  echo "  ✅ :white_check_mark: - Tests"
+  echo "  🔧 :wrench:    - Configuration"
+  echo "  🚀 :rocket:    - Deployment"
+  echo ""
+  exit 1
+fi
+
+echo "✅ Commit message format is valid"
