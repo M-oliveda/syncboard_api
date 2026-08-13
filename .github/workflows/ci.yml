@@ -2,7 +2,9 @@
 #
 # Runs on all pull requests to develop/release/main and pushes to develop/main.
 # Validates code quality, runs the full test suite, and enforces the 100% coverage
-# gate (see MASTERPLAN.md §11.2).
+# gate (see MASTERPLAN.md §11.2). On pull requests, deploys a PR preview via the
+# reusable Deploy Preview workflow only after the test job passes — deploy-preview.yml
+# has no trigger of its own, so a preview can never deploy before (or without) CI.
 
 name: CI
 
@@ -82,3 +84,13 @@ jobs:
           path: coverage/
           retention-days: 14
           if-no-files-found: ignore
+
+  deploy-preview:
+    if: github.event_name == 'pull_request'
+    needs: test
+    uses: ./.github/workflows/deploy-preview.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write

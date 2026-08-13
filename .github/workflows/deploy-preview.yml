@@ -4,13 +4,15 @@
 # be reviewed live before merge. Preview has its own dedicated GCP project and secrets
 # (see MASTERPLAN.md §11.0/§11.3), separate from Development, pulled from the `preview`
 # GitHub Environment below.
+#
+# Reusable workflow — only ever invoked by ci.yml's deploy-preview job after the test
+# job passes. Never triggers on its own `pull_request` event, so a preview can't deploy
+# ahead of (or independently of) CI.
 
 name: Deploy Preview
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
-    branches: [develop, "release/**", main]
+  workflow_call:
 
 env:
   REGION: us-central1
