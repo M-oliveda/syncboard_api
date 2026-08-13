@@ -33,12 +33,17 @@ Cloud Run instance handles their connection.
 
 ### This Repository Contains
 
-- 🔐 **JWT Authentication via Passport.js** — register, login, password reset, using a `passport-jwt` strategy for stateless request auth
+- 🔐 **JWT Authentication via Passport.js** — register, login, password reset, using a
+  `passport-jwt` strategy for stateless request auth
 - 📋 **Board/List/Card CRUD** — REST endpoints backing the Kanban board
-- ⚡ **Real-Time Sync** — Socket.io rooms scoped per board, fanned out across instances via a Redis Pub/Sub adapter
-- 🧮 **Order-Preserving Reorder Logic** — fractional/LexoRank-style ordering so a card move never requires re-indexing siblings
-- 📧 **Transactional Email** — Resend + React Email power password-reset and account emails
-- 📖 **OpenAPI 3.0 Docs** — interactive Swagger UI mounted per API version (`/api/v1/docs`)
+- ⚡ **Real-Time Sync** — Socket.io rooms scoped per board, fanned out across instances
+  via a Redis Pub/Sub adapter
+- 🧮 **Order-Preserving Reorder Logic** — fractional/LexoRank-style ordering so a card
+  move never requires re-indexing siblings
+- 📧 **Transactional Email** — Resend + React Email power password-reset and account
+  emails
+- 📖 **OpenAPI 3.0 Docs** — interactive Swagger UI mounted per API version
+  (`/api/v1/docs`)
 - 🪵 **Structured Logging** — Winston + Morgan, JSON output ready for Cloud Logging
 
 ### Related Repository
@@ -46,9 +51,10 @@ Cloud Run instance handles their connection.
 This API is one half of the SyncBoard product — the UI that consumes it lives in a
 separate repository:
 
-- **Frontend Repository:** [`m-oliveda/syncboard_web`](https://github.com/m-oliveda/syncboard_web)
-  (see its [README](https://github.com/m-oliveda/syncboard_web/blob/main/README.md) for
-  the product pitch, UI structure, and frontend architecture)
+- **Frontend Repository:**
+  [`m-oliveda/syncboard_web`](https://github.com/m-oliveda/syncboard_web) (see its
+  [README](https://github.com/m-oliveda/syncboard_web/blob/main/README.md) for the
+  product pitch, UI structure, and frontend architecture)
 
 ---
 
@@ -56,8 +62,8 @@ separate repository:
 
 Cloud Run can spin up multiple backend instances to handle traffic, so User A might be
 connected to Instance 1 while User B is connected to Instance 2. Without a shared
-synchronization layer, User A would never see User B's changes. Redis closes that gap
-by acting as the message bus between instances.
+synchronization layer, User A would never see User B's changes. Redis closes that gap by
+acting as the message bus between instances.
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -101,9 +107,9 @@ Full architectural rationale: [`MASTERPLAN.md`](./MASTERPLAN.md#3-architecture).
 
 ### 1. Authentication
 
-Powered by [Passport.js](https://www.passportjs.org/), using a `passport-jwt` strategy so
-protected routes are guarded by `passport.authenticate("jwt", { session: false })` instead
-of a hand-rolled JWT-verification middleware.
+Powered by [Passport.js](https://www.passportjs.org/), using a `passport-jwt` strategy
+so protected routes are guarded by `passport.authenticate("jwt", { session: false })`
+instead of a hand-rolled JWT-verification middleware.
 
 | Endpoint                            | Description                               |
 | ----------------------------------- | ----------------------------------------- |
@@ -139,8 +145,8 @@ of a hand-rolled JWT-verification middleware.
 
 - **Resend** — delivery provider for all outbound email (password reset, account
   notifications)
-- **React Email** — email templates written as React components (`src/emails/`), rendered
-  to HTML before being handed to Resend
+- **React Email** — email templates written as React components (`src/emails/`),
+  rendered to HTML before being handed to Resend
 
 ---
 
@@ -181,7 +187,7 @@ of a hand-rolled JWT-verification middleware.
 | **Linting**    | ESLint           | Code quality                                         |
 | **Formatting** | Prettier         | Code formatting                                      |
 | **Container**  | Docker           | Local dev parity + deployment                        |
-| **Git Hooks**  | Husky            | Enforce lint/format/commit-msg standards on commit   |
+| **Git Hooks**  | Husky            | Enforce lint/format/type-check/commit-msg on commit  |
 
 ---
 
@@ -198,10 +204,10 @@ A relational structure embedded within MongoDB's document model:
 | **Card**      | `_id`, `listId`, `title`, `description`, `order`, `assignees`, `labels`                   |
 | **Activity**  | `_id`, `cardId`, `userId`, `action` (e.g. `"moved card from To Do to Done"`), `timestamp` |
 
-**Reorder strategy:** moving a card should never require re-indexing every sibling
-card. `order` uses fractional/LexoRank-style values so a single card's position can be
-updated in isolation. Full Mongoose schema definitions, indexing strategy, and
-rebalancing notes: [`MASTERPLAN.md`](./MASTERPLAN.md#5-database-schema--data-models).
+**Reorder strategy:** moving a card should never require re-indexing every sibling card.
+`order` uses fractional/LexoRank-style values so a single card's position can be updated
+in isolation. Full Mongoose schema definitions, indexing strategy, and rebalancing
+notes: [`MASTERPLAN.md`](./MASTERPLAN.md#5-database-schema--data-models).
 
 > The frontend's optimistic drag-and-drop logic computes new `order` values using this
 > same scheme — see
@@ -435,8 +441,8 @@ consumer of this API. This is how the two repos are wired together:
 ### REST
 
 - The frontend targets this service's base URL via `VITE_API_BASE_URL` (e.g.
-  `http://localhost:4000/api/v1` in development). All requests go through a single
-  Axios instance so token attachment and refresh are handled in one place.
+  `http://localhost:4000/api/v1` in development). All requests go through a single Axios
+  instance so token attachment and refresh are handled in one place.
 - On `login`/`register`, the access token is kept in memory (not `localStorage`, to
   limit XSS blast radius) and attached as `Authorization: Bearer <access_token>` by an
   Axios request interceptor. The refresh token is returned in an `HttpOnly` cookie.
@@ -444,8 +450,8 @@ consumer of this API. This is how the two repos are wired together:
   once, retries the original request with the new access token, and only redirects to
   `/login` if the refresh itself fails.
 - CORS is locked down via `CORS_ORIGIN` (see
-  [Environment Variables](#environment-variables)) — set it to the exact frontend
-  origin (`http://localhost:5173` in dev; the deployed Cloud Run URL in staging/prod).
+  [Environment Variables](#environment-variables)) — set it to the exact frontend origin
+  (`http://localhost:5173` in dev; the deployed Cloud Run URL in staging/prod).
 
 ### Real-Time
 
@@ -474,11 +480,11 @@ consumer of this API. This is how the two repos are wired together:
 
 ### Prerequisites
 
-- **Node.js LTS** — [Download](https://nodejs.org/)
-- **npm**
-- **Docker Desktop** & **Docker Compose**
-- **MongoDB Atlas account** (free M0 tier)
-- **Redis Cloud account** (free tier)
+- **Docker Desktop** & **Docker Compose** — required to run the local stack
+- **Node.js LTS** & **npm** — [Download](https://nodejs.org/) — required for lint,
+  tests, and Husky git hooks
+- **MongoDB Atlas account** (free M0 tier) — deployed environments only
+- **Redis Cloud account** (free tier) — deployed environments only
 - **Git**
 
 ### Quick Start
@@ -490,28 +496,24 @@ git clone https://github.com/m-oliveda/syncboard_api.git
 cd syncboard_api
 ```
 
-**2. Install dependencies:**
-
-```bash
-npm install
-```
-
-**3. Configure environment:**
+**2. Configure environment:**
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` with your MongoDB Atlas connection string and Redis Cloud URL (see
+Fill in local secrets (`JWT_SECRET`, `JWT_REFRESH_SECRET`, etc.). Compose overrides
+`MONGO_URI` and `REDIS_URL` to the `mongo` / `redis` services, so Atlas and Redis Cloud
+URLs are not required to boot locally (see
 [Environment Variables](#environment-variables)).
 
-**4. Start the dev server:**
+**3. Start the local stack** (API + MongoDB + Redis):
 
 ```bash
-npm run dev
+docker compose up --build
 ```
 
-**5. Explore the API:**
+**4. Explore the API:**
 
 - **Base URL:** `http://localhost:4000/api/v1`
 - **Swagger UI:** `http://localhost:4000/api/v1/docs`
@@ -532,7 +534,7 @@ curl -X POST http://localhost:4000/api/v1/auth/register \
 
 ```bash
 # Development
-npm run dev              # Start with hot reload (tsx/nodemon)
+npm run dev              # Hot reload (used by the Compose `api` service; optional on the host)
 npm run build             # Compile TypeScript to JavaScript
 npm run start              # Run compiled build
 
@@ -554,25 +556,33 @@ npm run type-check           # TypeScript type checking
 ### Git Hooks (Husky)
 
 This project uses Husky to enforce quality standards automatically, so CI failures for
-lint/format/commit-message issues never happen — they're caught before the commit
-exists:
+lint/format/type-check/commit-message issues never happen — they're caught before the
+commit exists:
 
-- **Pre-commit:** runs `lint` and `format:check` against staged files
-- **Commit message:** validated against Gitmoji format (e.g. `:sparkles: Add card reorder endpoint`), matching the convention used in
+- **Pre-commit:** runs `lint`, `format:check`, `type-check`, and `test`
+- **Commit message:** validated against Gitmoji format (e.g.
+  `:sparkles: Add card reorder endpoint`), matching the convention used in
   [`syncboard_web`](https://github.com/m-oliveda/syncboard_web)
 
-### Docker Compose (Local Mongo/Redis)
+### Docker Compose (Local Stack)
 
-For fully offline local development, `docker-compose.yml` can spin up local MongoDB and
-Redis containers so you don't depend on the cloud free tiers during iteration:
+`docker-compose.yml` is the local development stack: the API (`tsx watch`), MongoDB, and
+Redis. It is not used in CI/CD or to run Cloud Run.
 
 ```bash
-docker compose up -d
-npm run dev
+docker compose up --build    # api + mongo + redis
+docker compose down
 ```
 
-> In this setup `MONGO_URI` and `REDIS_URL` point at the local containers; switch back
-> to the Atlas/Redis Cloud URLs before deploying.
+Inside the `api` container, Compose overrides `MONGO_URI` and `REDIS_URL` to Docker DNS
+names (`mongodb://mongo:27017/syncboard`, `redis://redis:6379`) so they do not use
+`.env`'s `localhost` values. Host-side `npm run dev` can still point at the published
+ports (`localhost:27017` / `localhost:6379`).
+
+`npm install` on the host is only needed for lint, tests, and Husky — not to run the
+stack.
+
+> Switch `MONGO_URI` and `REDIS_URL` to the Atlas / Redis Cloud URLs before deploying.
 
 ---
 
@@ -639,13 +649,10 @@ setup used by [`syncboard_web`](https://github.com/m-oliveda/syncboard_web):
 
 | Environment     | GCP Project ID                 | Service Account          |
 | --------------- | ------------------------------ | ------------------------ |
-| **Preview**     | `moliveda-gcloudprojects-dev`  | `cicd-deployer-dev@...`  |
+| **Preview**     | `moliveda-gcloudprojects-prev` | `cicd-deployer-prev@...` |
 | **Development** | `moliveda-gcloudprojects-dev`  | `cicd-deployer-dev@...`  |
 | **Staging**     | `moliveda-gcloudprojects-stg`  | `cicd-deployer-stg@...`  |
 | **Production**  | `moliveda-gcloudprojects-prod` | `cicd-deployer-prod@...` |
-
-> **Preview** deploys into the same GCP project as Development — it's an ephemeral,
-> per-PR Cloud Run service, not a separate long-lived environment.
 
 ### Deployment Strategy
 
@@ -671,9 +678,9 @@ no long-lived GCP service account keys are stored in CI:
   (`npm run test:coverage`) — the job fails if coverage is below 100%.
 - **Deploy Preview (on PR open/sync):** builds the Docker image, pushes to Artifact
   Registry, deploys an ephemeral Cloud Run service named `syncboard-api-pr-<PR#>` in the
-  dev project, and comments the preview URL on the PR.
-- **Cleanup Preview (on PR close/merge):** deletes the `syncboard-api-pr-<PR#>` Cloud Run
-  service so ephemeral environments don't accumulate.
+  preview project, and comments the preview URL on the PR.
+- **Cleanup Preview (on PR close/merge):** deletes the `syncboard-api-pr-<PR#>` Cloud
+  Run service so ephemeral environments don't accumulate.
 - **Deploy Development:** builds the Docker image, pushes to Artifact Registry, deploys
   to the `syncboard-api` Cloud Run service in the dev project with session affinity
   enabled
@@ -763,7 +770,7 @@ syncboard_api/
 │           └── openapi.yaml         # OpenAPI 3.0 spec served at /api/v1/docs
 │
 ├── tests/
-├── .husky/                          # Pre-commit lint/format + commit-msg hooks
+├── .husky/                          # Pre-commit lint/format/type-check/test + commit-msg hooks
 ├── .github/
 │   └── workflows/                   # CI + per-environment deploy pipelines
 ├── .env.example
@@ -793,10 +800,15 @@ NODE_ENV=development
 PORT=4000
 
 # Database (MongoDB Atlas — external, outside GCP)
-MONGO_URI=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/syncboard
+# Local Compose overrides this to mongodb://mongo:27017/syncboard inside the
+# `api` container. localhost is for an optional host-side `npm run dev`.
+# Swap for the Atlas connection string before deploying.
+MONGO_URI=mongodb://localhost:27017/syncboard
 
 # Redis (Redis Cloud — external, outside GCP; Socket.io Pub/Sub adapter only)
-REDIS_URL=redis://<user>:<password>@<host>:<port>
+# Local Compose overrides this to redis://redis:6379 inside the `api` container.
+# Swap for the Redis Cloud URL before deploying.
+REDIS_URL=redis://localhost:6379
 
 # Auth (JWTs signed here, verified by the passport-jwt strategy in src/config/passport.ts)
 JWT_SECRET=replace-with-a-strong-random-secret
@@ -833,4 +845,5 @@ details.
 ## Additional Resources
 
 - **Detailed Architecture:** [MASTERPLAN.md](./MASTERPLAN.md)
-- **Frontend Repository:** [`m-oliveda/syncboard_web`](https://github.com/m-oliveda/syncboard_web)
+- **Frontend Repository:**
+  [`m-oliveda/syncboard_web`](https://github.com/m-oliveda/syncboard_web)
