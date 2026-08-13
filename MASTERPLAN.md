@@ -47,8 +47,8 @@ m-oliveda/syncboard_api
 
 ### Business Value
 
-- **For Users:** changes made by teammates appear instantly — no refresh, no stale
-  board state, no lost work from conflicting edits.
+- **For Users:** changes made by teammates appear instantly — no refresh, no stale board
+  state, no lost work from conflicting edits.
 - **For Developers:** demonstrates production-grade patterns for scaling stateful
   real-time features on stateless serverless compute.
 - **For Portfolio:** showcases REST API design, WebSocket architecture, and
@@ -61,8 +61,8 @@ m-oliveda/syncboard_api
 ### 2.1 Vision
 
 Provide a backend that makes multi-user board collaboration feel instantaneous and
-reliable, while remaining cheap to run and easy to reason about — no dedicated
-stateful servers, just stateless containers plus a thin synchronization layer.
+reliable, while remaining cheap to run and easy to reason about — no dedicated stateful
+servers, just stateless containers plus a thin synchronization layer.
 
 ### 2.2 Target Users
 
@@ -131,10 +131,10 @@ so if User A is on Instance 1 and User B is on Instance 2, a broadcast from Inst
 never reaches User B's socket, because Instance 2 doesn't know that room even had an
 update.
 
-`@socket.io/redis-adapter` solves this by publishing every broadcast to a Redis
-channel; every instance subscribes to that channel and re-emits the event to its own
-locally-connected sockets. The result: broadcasting behaves as if there were one
-server, regardless of how many instances Cloud Run is currently running.
+`@socket.io/redis-adapter` solves this by publishing every broadcast to a Redis channel;
+every instance subscribes to that channel and re-emits the event to its own
+locally-connected sockets. The result: broadcasting behaves as if there were one server,
+regardless of how many instances Cloud Run is currently running.
 
 ### 3.3 Request Flow — REST
 
@@ -294,9 +294,9 @@ single drag-and-drop can trigger N writes. Instead, `order` is a floating-point 
 - Only the **moved document** is written — siblings are untouched.
 
 **Rebalancing:** if repeated inserts between the same two cards cause floating-point
-precision to degrade, a background job (or a lazy check on write) renumbers the
-affected list's cards to evenly-spaced integers. This is documented as a known
-follow-up rather than implemented in v1, since it only matters at high edit volume.
+precision to degrade, a background job (or a lazy check on write) renumbers the affected
+list's cards to evenly-spaced integers. This is documented as a known follow-up rather
+than implemented in v1, since it only matters at high edit volume.
 
 ### 5.4 Indexes
 
@@ -317,12 +317,11 @@ follow-up rather than implemented in v1, since it only matters at high edit volu
   rather than mutating existing contracts. Each version mounts its own Swagger UI at
   `/api/v<n>/docs`, generated from its own `src/docs/v<n>/openapi.yaml` — versions never
   share a spec or a docs route.
-- REST resource naming is plural and nested by ownership
-  (`/workspaces/:id/boards`, `/boards/:id/lists`, `/lists/:id/cards`), not by
-  verb-in-the-URL actions.
-- `POST` creates, `GET` reads, `PATCH` performs a partial update (including reorder/move,
-  which are just updates to `order`/`listId`), `DELETE` removes. There is no dedicated
-  `PUT` or action-suffixed route (no `/reorder`, no `/move`).
+- REST resource naming is plural and nested by ownership (`/workspaces/:id/boards`,
+  `/boards/:id/lists`, `/lists/:id/cards`), not by verb-in-the-URL actions.
+- `POST` creates, `GET` reads, `PATCH` performs a partial update (including
+  reorder/move, which are just updates to `order`/`listId`), `DELETE` removes. There is
+  no dedicated `PUT` or action-suffixed route (no `/reorder`, no `/move`).
 - Mutations (`POST`/`PATCH`) validate the request body with a Zod schema before hitting
   the service layer.
 
@@ -439,13 +438,13 @@ instance — no application code needs to know how many instances exist.
 
 ### 7.4 Session Affinity (Cloud Run)
 
-The WebSocket handshake is a long-lived HTTP connection. Cloud Run must route all
-frames of that connection to the **same instance** for the socket to function —
-otherwise the initial `Upgrade` request and subsequent frames could land on different
-instances. This is configured via Cloud Run's **Session Affinity** setting
-(`--session-affinity` on `gcloud run deploy`), which is orthogonal to the Redis
-adapter: affinity keeps one client's connection stable; Redis is what lets that stable
-connection still receive events triggered by clients connected elsewhere.
+The WebSocket handshake is a long-lived HTTP connection. Cloud Run must route all frames
+of that connection to the **same instance** for the socket to function — otherwise the
+initial `Upgrade` request and subsequent frames could land on different instances. This
+is configured via Cloud Run's **Session Affinity** setting (`--session-affinity` on
+`gcloud run deploy`), which is orthogonal to the Redis adapter: affinity keeps one
+client's connection stable; Redis is what lets that stable connection still receive
+events triggered by clients connected elsewhere.
 
 ---
 
@@ -453,8 +452,8 @@ connection still receive events triggered by clients connected elsewhere.
 
 ### 8.1 JWT Strategy (Passport.js)
 
-Authentication is implemented with [Passport.js](https://www.passportjs.org/) rather than
-a hand-rolled bearer-token check, so verification logic lives in one declarative
+Authentication is implemented with [Passport.js](https://www.passportjs.org/) rather
+than a hand-rolled bearer-token check, so verification logic lives in one declarative
 strategy instead of custom middleware:
 
 ```typescript
@@ -476,23 +475,23 @@ passport.use(
 );
 ```
 
-Protected routes call `passport.authenticate("jwt", { session: false })` — `session:
-false` keeps the API stateless, consistent with running behind Cloud Run's
+Protected routes call `passport.authenticate("jwt", { session: false })` —
+`session: false` keeps the API stateless, consistent with running behind Cloud Run's
 horizontally-scaled, session-affinity-only instances (no server-side session store).
 
 - **Access token:** short-lived (`15m`), sent as a bearer token on every REST request
   and during the Socket.io handshake. Signed with `jsonwebtoken`; verified by the
   `passport-jwt` strategy above.
 - **Refresh token:** longer-lived (`7d`), used only to mint a new access token via a
-  dedicated refresh endpoint; stored client-side in an httpOnly cookie or secure
-  storage (frontend's responsibility, documented in `web/MASTERPLAN.md`).
+  dedicated refresh endpoint; stored client-side in an httpOnly cookie or secure storage
+  (frontend's responsibility, documented in `web/MASTERPLAN.md`).
 - Tokens are signed with distinct secrets (`JWT_SECRET`, `JWT_REFRESH_SECRET`) so a
   leaked access-token secret cannot be used to forge refresh tokens.
 
 ### 8.2 Password Handling
 
-- Hashed with `bcryptjs` (cost factor 12) before storage — plaintext passwords are
-  never persisted or logged.
+- Hashed with `bcryptjs` (cost factor 12) before storage — plaintext passwords are never
+  persisted or logged.
 - Password reset uses a single-use, time-limited token, not the password itself. The
   reset link is delivered by the email service (§8.5) — never returned in the API
   response.
@@ -548,16 +547,17 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string) {
 
 ### 9.1 Prerequisites
 
-- Node.js LTS, npm
-- Docker Desktop + Docker Compose (optional, for local Mongo/Redis containers)
-- MongoDB Atlas free-tier cluster
-- Redis Cloud free-tier instance
+- Docker Desktop + Docker Compose — required to run the local stack (API + MongoDB +
+  Redis)
+- Node.js LTS, npm — required for lint, tests, and Husky git hooks
+- MongoDB Atlas free-tier cluster — deployed environments only
+- Redis Cloud free-tier instance — deployed environments only
 
 ### 9.1.1 Git Hooks (Husky)
 
 Husky enforces quality gates locally, before code ever reaches CI:
 
-- **Pre-commit:** `lint` + `format:check` against staged files
+- **Pre-commit:** `lint` + `format:check` + `type-check` + `test`
 - **Commit message:** validated against Gitmoji format (e.g.
   `:sparkles: Add card reorder endpoint`), matching the convention used in
   `syncboard_web`
@@ -568,28 +568,93 @@ Husky enforces quality gates locally, before code ever reaches CI:
 git clone https://github.com/m-oliveda/syncboard_api.git
 cd syncboard_api
 cp .env.example .env
-npm install
-npm run dev
+docker compose up --build
 ```
 
-### 9.3 Docker Compose (Optional Local Parity)
+`npm install` on the host is only needed for lint, tests, and Husky — not to run the
+stack.
+
+### 9.3 Docker Compose (Local Stack)
+
+`docker-compose.yml` runs the API, MongoDB, and Redis together. It is local development
+only — not used in CI/CD.
 
 ```yaml
+name: syncboard-api_local
+
 services:
   mongo:
     image: mongo:7
+    container_name: syncboard-api-mongo
+    restart: unless-stopped
     ports: ["27017:27017"]
-    volumes: ["mongo-data:/data/db"]
+    environment:
+      - MONGO_INITDB_DATABASE=syncboard
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - syncboard-local
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   redis:
     image: redis:7
+    container_name: syncboard-api-redis
+    restart: unless-stopped
     ports: ["6379:6379"]
+    networks:
+      - syncboard-local
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    container_name: syncboard-api
+    ports: ["4000:4000"]
+    env_file: .env
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+      MONGO_URI: mongodb://mongo:27017/syncboard
+      REDIS_URL: redis://redis:6379
+    volumes:
+      - .:/app
+      - api-node-modules:/app/node_modules
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - syncboard-local
+
+networks:
+  syncboard-local:
+    driver: bridge
+
 volumes:
   mongo-data:
+  api-node-modules:
 ```
 
-Point `MONGO_URI=mongodb://localhost:27017/syncboard` and
-`REDIS_URL=redis://localhost:6379` at these containers during iteration, then switch
-back to Atlas/Redis Cloud URLs before pushing.
+No persistent volume for Redis — it's the Socket.io Pub/Sub adapter only, never used for
+data storage, so nothing there needs to survive a restart (see §4.2).
+
+Compose overrides `MONGO_URI` and `REDIS_URL` inside the `api` container to Docker DNS
+names (`mongodb://mongo:27017/syncboard`, `redis://redis:6379`). Host-side `.env` may
+keep `localhost` for an optional `npm run dev` on the machine. Switch to Atlas / Redis
+Cloud URLs before deploying.
 
 ---
 
@@ -629,12 +694,12 @@ describe("computeOrderBetween", () => {
 ### 11.0 GCP Infrastructure
 
 Each environment has a dedicated GCP project and service account, matching the pattern
-used by `syncboard_web`. Preview deploys share the Development project since they are
+used by `syncboard_web`. Preview deploys uses the preview project since they are
 ephemeral, per-PR Cloud Run services rather than a standing environment:
 
 | Environment     | GCP Project ID                 | Service Account          |
 | --------------- | ------------------------------ | ------------------------ |
-| **Preview**     | `moliveda-gcloudprojects-dev`  | `cicd-deployer-dev@...`  |
+| **Preview**     | `moliveda-gcloudprojects-prev` | `cicd-deployer-prev@...` |
 | **Development** | `moliveda-gcloudprojects-dev`  | `cicd-deployer-dev@...`  |
 | **Staging**     | `moliveda-gcloudprojects-stg`  | `cicd-deployer-stg@...`  |
 | **Production**  | `moliveda-gcloudprojects-prod` | `cicd-deployer-prod@...` |
@@ -653,14 +718,15 @@ ephemeral, per-PR Cloud Run services rather than a standing environment:
 
 1. **CI (`ci.yml`, every pull request** to `develop`, `release/**`, `main`**):** install
    deps → lint → format check → type-check → build → `test:coverage`. The job fails the
-   check if the Jest coverage summary is below 100% across statements/branches/functions/
-   lines — this is the enforcement mechanism behind the "100% testing coverage" goal in
-   [Testing Strategy](#10-testing-strategy).
+   check if the Jest coverage summary is below 100% across
+   statements/branches/functions/ lines — this is the enforcement mechanism behind the
+   "100% testing coverage" goal in [Testing Strategy](#10-testing-strategy).
 2. **Deploy Preview (`deploy-preview.yml`, on PR open/sync):** build the Docker image,
    push to Artifact Registry, deploy an ephemeral Cloud Run service named
-   `syncboard-api-pr-<PR#>` in the dev project, comment the preview URL on the PR.
+   `syncboard-api-pr-<PR#>` in the preview project, comment the preview URL on the PR.
 3. **Cleanup Preview (`cleanup-preview.yml`, on PR close):** delete the
-   `syncboard-api-pr-<PR#>` Cloud Run service so ephemeral environments don't accumulate.
+   `syncboard-api-pr-<PR#>` Cloud Run service so ephemeral environments don't
+   accumulate.
 4. **Deploy Development:** build Docker image, push to Artifact Registry, deploy to the
    `syncboard-api` Cloud Run service (dev project) with session affinity enabled
 5. **Deploy Staging:** same, targeting the staging Cloud Run project
@@ -681,8 +747,9 @@ RESEND_API_KEY
 ```
 
 Authentication to GCP uses Workload Identity Federation — no long-lived service account
-keys stored in CI. Preview deploys reuse the Development environment's secrets since
-they share a GCP project.
+keys stored in CI. Preview deploys use their own `GCP_PROJECT_ID`/service-account
+secrets, scoped to the dedicated preview GCP project from §11.0 — not shared with
+Development.
 
 ---
 
@@ -690,9 +757,9 @@ they share a GCP project.
 
 ### Phase 0 — Project Scaffolding & Testing Infra
 
-- [ ] Initialize the TypeScript project (`tsconfig.json`, ESLint, Prettier, Husky hooks)
-- [ ] Wire up Jest + Supertest with a coverage threshold of 100%
-- [ ] Add `docker-compose.yml` for local MongoDB + Redis
+- [x] Initialize the TypeScript project (`tsconfig.json`, ESLint, Prettier, Husky hooks)
+- [x] Wire up Jest + Supertest with a coverage threshold of 100%
+- [x] Add `docker-compose.yml` for the local stack (API + MongoDB + Redis)
 
 ### Phase 1 — Stateless REST API
 
