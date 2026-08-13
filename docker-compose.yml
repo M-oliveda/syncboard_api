@@ -1,0 +1,66 @@
+name: syncboard-api_local
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: syncboard-api-mongo
+    restart: unless-stopped
+    ports: ["27017:27017"]
+    environment:
+      - MONGO_INITDB_DATABASE=syncboard
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - syncboard-local
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:7
+    container_name: syncboard-api-redis
+    restart: unless-stopped
+    ports: ["6379:6379"]
+    networks:
+      - syncboard-local
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    container_name: syncboard-api
+    ports: ["4000:4000"]
+    env_file: .env
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+      MONGO_URI: mongodb://mongo:27017/syncboard
+      REDIS_URL: redis://redis:6379
+    volumes:
+      - .:/app
+      - api-node-modules:/app/node_modules
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - syncboard-local
+
+networks:
+  syncboard-local:
+    driver: bridge
+
+volumes:
+  mongo-data:
+  api-node-modules:
