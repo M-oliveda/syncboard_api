@@ -1,0 +1,43 @@
+# Cleanup Preview Workflow
+#
+# Deletes the ephemeral per-PR Cloud Run service created by deploy-preview.yml so
+# ephemeral environments don't accumulate in the Development GCP project.
+
+name: Cleanup Preview
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [develop, "release/**", main]
+
+env:
+  REGION: us-central1
+  SERVICE: syncboard-api-pr-${{ github.event.pull_request.number }}
+
+jobs:
+  cleanup-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: preview
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Delete preview Cloud Run service
+        run: |
+          gcloud run services delete "${{ env.SERVICE }}" \
+            --region "${{ env.REGION }}" \
+            --project "${{ secrets.GCP_PROJECT_ID }}" \
+            --quiet || echo "Service ${{ env.SERVICE }} did not exist, nothing to clean up"
