@@ -63,7 +63,7 @@ jobs:
           region: ${{ env.REGION }}
           project_id: ${{ secrets.GCP_PROJECT_ID }}
           image: ${{ env.IMAGE }}
-          session_affinity: true
+          flags: "--session-affinity"
           env_vars: |
             NODE_ENV=production
             MONGO_URI=${{ secrets.MONGO_URI }}
