@@ -12,9 +12,33 @@ const userSchema = new Schema(
         passwordHash: {
             type: String,
             required: true,
+            select: false,
+        },
+        refreshTokenHash: {
+            type: String,
+            select: false,
+        },
+        passwordResetTokenHash: {
+            type: String,
+            select: false,
+        },
+        passwordResetTokenExpiresAt: {
+            type: Date,
+            select: false,
         },
     },
-    { timestamps: true },
+    {
+        timestamps: true,
+        toJSON: {
+            transform: (_doc, ret: Record<string, unknown>) => {
+                delete ret.passwordHash;
+                delete ret.refreshTokenHash;
+                delete ret.passwordResetTokenHash;
+                delete ret.passwordResetTokenExpiresAt;
+                return ret;
+            },
+        },
+    },
 );
 
 export type User = InferSchemaType<typeof userSchema>;
