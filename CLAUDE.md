@@ -17,12 +17,12 @@ Socket.io adapter, not for data storage.
 
 Phase 0 scaffolding is in place: `package.json`, `tsconfig.json`, ESLint/Prettier/Jest
 config, `docker-compose.yml` (local API + MongoDB + Redis), `Dockerfile`, and the
-`ci.yml`/`deploy-preview.yml`/`cleanup-preview.yml` GitHub Actions workflows. `src/`
-still only has a placeholder entrypoint — the actual routes/services/models/sockets
-described in `README.md`/`MASTERPLAN.md` haven't been built yet. Treat those documents
-as the target contract for application code you write, not as a description of code
-already present; check what actually exists in the repo before assuming a file or script
-is there.
+`ci.yml`/`deploy-dev.yml`/`deploy-staging.yml`/`deploy-prod.yml` GitHub Actions
+workflows. `src/` still only has a placeholder entrypoint — the actual
+routes/services/models/sockets described in `README.md`/`MASTERPLAN.md` haven't been
+built yet. Treat those documents as the target contract for application code you write,
+not as a description of code already present; check what actually exists in the repo
+before assuming a file or script is there.
 
 ## Mandatory: Generate a Coding Plan First
 
@@ -62,10 +62,17 @@ trivial, plan it.
 - Auth is the `passport-jwt` strategy — don't hand-roll JWT-verification middleware
 - Only `services/*.service.ts` files import Mongoose models directly — routes and
   controllers never query a model directly
-- Preview deploys run in their own dedicated GCP project/service account
-  (`moliveda-gcloudprojects-prev` / `cicd-deployer-prev@...`), separate from Development
-  — don't assume `deploy-preview.yml`, `cleanup-preview.yml`, or any future deploy
-  workflow shares infrastructure, secrets, or a GitHub Environment with Development
+- Each of development/staging/production has its own dedicated GCP project, service
+  account, and GitHub Environment — never assume a deploy workflow shares
+  infrastructure, secrets, or a GitHub Environment with another environment
+- `deploy-dev.yml`/`deploy-staging.yml` are `workflow_call`-only reusable workflows
+  chained from `ci.yml` after its `test` job passes — never give them a `push` or
+  `pull_request` trigger of their own. `deploy-prod.yml` is the sole `workflow_dispatch`
+  entry point and always reruns `ci.yml`'s `test` job (via `workflow_call`) before
+  deploying, since manual dispatch bypasses `ci.yml`'s own triggers
+- Container images are pushed to the public Docker Hub repository
+  `docker.io/moliveda/syncboard-api`, not Google Artifact Registry — don't reintroduce
+  Artifact Registry push/pull steps
 
 ## Commands
 

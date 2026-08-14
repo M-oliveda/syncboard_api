@@ -694,25 +694,24 @@ describe("computeOrderBetween", () => {
 ### 11.0 GCP Infrastructure
 
 Each environment has a dedicated GCP project and service account, matching the pattern
-used by `syncboard_web`. Preview deploys uses the preview project since they are
-ephemeral, per-PR Cloud Run services rather than a standing environment:
+used by `syncboard_web`. Container images are not hosted on GCP — they're pushed to the
+public Docker Hub repository `docker.io/moliveda/syncboard-api`, which every
+environment's Cloud Run service pulls from directly:
 
 | Environment     | GCP Project ID                 | Service Account          |
 | --------------- | ------------------------------ | ------------------------ |
-| **Preview**     | `moliveda-gcloudprojects-prev` | `cicd-deployer-prev@...` |
 | **Development** | `moliveda-gcloudprojects-dev`  | `cicd-deployer-dev@...`  |
 | **Staging**     | `moliveda-gcloudprojects-stg`  | `cicd-deployer-stg@...`  |
 | **Production**  | `moliveda-gcloudprojects-prod` | `cicd-deployer-prod@...` |
 
 ### 11.1 GitFlow Branch → Environment Mapping
 
-| Branch/Event | Environment | Trigger                                  |
-| ------------ | ----------- | ---------------------------------------- |
-| Pull request | Preview     | Deploy on PR open/sync; cleanup on close |
-| `feature/*`  | Local only  | Manual                                   |
-| `develop`    | Development | Auto-deploy on push                      |
-| `release/*`  | Staging     | Auto-deploy on push                      |
-| `main`       | Production  | Manual dispatch                          |
+| Branch/Event | Environment | Trigger             |
+| ------------ | ----------- | ------------------- |
+| `feature/*`  | Local only  | Manual              |
+| `develop`    | Development | Auto-deploy on push |
+| `release/*`  | Staging     | Auto-deploy on push |
+| `main`       | Production  | Manual dispatch     |
 
 ### 11.2 Pipeline Stages
 
@@ -720,18 +719,20 @@ ephemeral, per-PR Cloud Run services rather than a standing environment:
    deps → lint → format check → type-check → build → `test:coverage`. The job fails the
    check if the Jest coverage summary is below 100% across
    statements/branches/functions/ lines — this is the enforcement mechanism behind the
-   "100% testing coverage" goal in [Testing Strategy](#10-testing-strategy).
-2. **Deploy Preview (`deploy-preview.yml`, on PR open/sync):** build the Docker image,
-   push to Artifact Registry, deploy an ephemeral Cloud Run service named
-   `syncboard-api-pr-<PR#>` in the preview project, comment the preview URL on the PR.
-3. **Cleanup Preview (`cleanup-preview.yml`, on PR close):** delete the
-   `syncboard-api-pr-<PR#>` Cloud Run service so ephemeral environments don't
-   accumulate.
-4. **Deploy Development:** build Docker image, push to Artifact Registry, deploy to the
-   `syncboard-api` Cloud Run service (dev project) with session affinity enabled
-5. **Deploy Staging:** same, targeting the staging Cloud Run project
-6. **Deploy Production:** manual approval gate, then deploy to the production Cloud Run
-   project
+   "100% testing coverage" goal in [Testing Strategy](#10-testing-strategy). `ci.yml`
+   also accepts a `workflow_call` trigger so `deploy-prod.yml` can reuse this exact job
+   instead of duplicating it.
+2. **Deploy Development (`deploy-dev.yml`, on push to `develop`, after CI passes):**
+   build the Docker image, push to the public Docker Hub repository, deploy to the
+   `syncboard-api` Cloud Run service (dev project) with session affinity enabled.
+   Chained from `ci.yml` as a reusable workflow (`needs: test`) — it has no trigger of
+   its own, so a deploy can never happen ahead of (or independently of) CI.
+3. **Deploy Staging (`deploy-staging.yml`, on push to `release/**`, after CI passes):**
+   same pipeline, targeting the staging Cloud Run project. Also chained from `ci.yml`.
+4. **Deploy Production (`deploy-prod.yml`, manual dispatch only):** since manual
+   dispatch bypasses `ci.yml`'s own triggers, this workflow first reuses `ci.yml`'s
+   `test` job (via `workflow_call`) on the dispatched ref, then deploys to the
+   production Cloud Run project on success.
 
 ### 11.3 Required Secrets (per environment)
 
@@ -739,6 +740,8 @@ ephemeral, per-PR Cloud Run services rather than a standing environment:
 GCP_PROJECT_ID
 GCP_WORKLOAD_IDENTITY_PROVIDER
 GCP_SERVICE_ACCOUNT
+DOCKERHUB_USERNAME
+DOCKERHUB_TOKEN
 MONGO_URI
 REDIS_URL
 JWT_SECRET
@@ -747,9 +750,10 @@ RESEND_API_KEY
 ```
 
 Authentication to GCP uses Workload Identity Federation — no long-lived service account
-keys stored in CI. Preview deploys use their own `GCP_PROJECT_ID`/service-account
-secrets, scoped to the dedicated preview GCP project from §11.0 — not shared with
-Development.
+keys stored in CI. Each environment's `GCP_PROJECT_ID`/service-account secrets are
+scoped to its own dedicated GCP project from §11.0 and are never shared across
+environments; `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN` authenticate the image push to the
+shared public Docker Hub repository.
 
 ---
 
@@ -769,34 +773,40 @@ Development.
 
 ### Phase 2 — Auth Hardening (Passport.js)
 
-- [ ] Register the `passport-jwt` strategy (`src/config/passport.ts`)
-- [ ] Implement JWT access/refresh issuance and rotation
-- [ ] Implement password reset (token issuance + consumption)
-- [ ] Add rate limiting on auth routes
-- [ ] Add RBAC checks on workspace-scoped mutations
+- [x] Register the `passport-jwt` strategy (`src/config/passport.ts`)
+- [x] Implement JWT access/refresh issuance and rotation
+- [x] Implement password reset (token issuance + consumption)
+- [x] Add rate limiting on auth routes
+- [x] Add RBAC checks on workspace-scoped mutations
 
-### Phase 3 — Real-Time Layer
+### Phase 3 — CI/CD & Deployment Environments
+
+Pulled forward from the end of the roadmap — the pipeline exists before the features
+that need to ship through it, not after:
+
+- [x] Add `ci.yml` (lint, format check, type-check, build, coverage gate)
+- [x] Add `deploy-dev.yml`, `deploy-staging.yml`, `deploy-prod.yml`, chained from
+      `ci.yml` (dev/staging automatically on push; production via manual dispatch,
+      reusing `ci.yml`'s `test` job)
+- [x] Push images to the public Docker Hub repository
+      (`docker.io/moliveda/syncboard-api`) instead of Artifact Registry
+- [x] Configure Session Affinity on the Cloud Run service
+
+### Phase 4 — Real-Time Layer
 
 - [ ] Add Socket.io and implement `board:join` + presence tracking
 - [ ] Implement `card:moved` → persist → `card:updated` broadcast cycle within a single
       instance first (no Redis yet) to validate the event contract
 - [ ] Add the `@socket.io/redis-adapter` for cross-instance fan-out
 
-### Phase 4 — Transactional Email (Resend + React Email)
+### Phase 5 — Transactional Email (Resend + React Email)
 
 - [ ] Build React Email templates in `src/emails/` (password reset, welcome)
 - [ ] Implement `email.service.ts` (Resend client + template rendering)
 - [ ] Wire `auth.service.ts` to send the password-reset email on request
 
-### Phase 5 — Observability & Docs
+### Phase 6 — Observability & Docs
 
 - [ ] Structured logging (Winston + Morgan) with request correlation IDs
 - [ ] Complete the OpenAPI spec and mount Swagger UI at `/api/v1/docs`
 - [ ] Centralize RFC 7807 error handling across all routes
-
-### Phase 6 — CI/CD & Deployment Environments
-
-- [ ] Add `ci.yml` (lint, format check, type-check, build, coverage gate)
-- [ ] Add `deploy-preview.yml` + `cleanup-preview.yml` for per-PR Cloud Run previews
-- [ ] Add `deploy-dev.yml`, `deploy-staging.yml`, `deploy-prod.yml`
-- [ ] Configure Session Affinity on the Cloud Run service
