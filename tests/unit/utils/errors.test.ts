@@ -1,6 +1,7 @@
 import { describe, test, expect } from "@jest/globals";
 import {
     ConflictError,
+    ForbiddenError,
     NotFoundError,
     UnauthenticatedError,
     ValidationError,
@@ -34,5 +35,11 @@ describe("domain error classes", () => {
         const error = new ConflictError("Already exists");
         expect(error.status).toBe(409);
         expect(error.type).toBe("https://syncboard.dev/errors/conflict");
+    });
+
+    test("ForbiddenError carries a 403 status", () => {
+        const error = new ForbiddenError("Admin role required");
+        expect(error.status).toBe(403);
+        expect(error.type).toBe("https://syncboard.dev/errors/forbidden");
     });
 });
