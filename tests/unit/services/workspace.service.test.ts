@@ -23,7 +23,8 @@ jest.unstable_mockModule("@/models/list.model.js", () => ({ ListModel }));
 jest.unstable_mockModule("@/models/card.model.js", () => ({ CardModel }));
 
 const workspaceService = await import("@/services/workspace.service.js");
-const { ConflictError, NotFoundError } = await import("@/utils/errors.js");
+const { ConflictError, ForbiddenError, NotFoundError } =
+    await import("@/utils/errors.js");
 
 const buildWorkspaceDoc = (overrides: Record<string, unknown> = {}) => ({
     _id: new Types.ObjectId(),
@@ -87,24 +88,105 @@ describe("getWorkspaceById", () => {
     });
 });
 
-describe("updateWorkspaceName", () => {
-    test("updates the name and saves", async () => {
+describe("assertWorkspaceAccess", () => {
+    test("membership-only (default options) allows a Member", async () => {
+        const userId = new Types.ObjectId();
+        const doc = buildWorkspaceDoc({ members: [{ userId, role: "Member" }] });
+        WorkspaceModel.findById.mockResolvedValueOnce(doc);
+
+        const result = await workspaceService.assertWorkspaceAccess(
+            doc._id.toString(),
+            userId.toString(),
+        );
+
+        expect(result).toEqual({ workspace: doc, member: { userId, role: "Member" } });
+    });
+
+    test("membership-only (default options) rejects a non-member", async () => {
         const doc = buildWorkspaceDoc();
+        WorkspaceModel.findById.mockResolvedValueOnce(doc);
+
+        await expect(
+            workspaceService.assertWorkspaceAccess(
+                doc._id.toString(),
+                new Types.ObjectId().toString(),
+            ),
+        ).rejects.toThrow(ForbiddenError);
+    });
+
+    test("requireAdmin allows an Admin", async () => {
+        const userId = new Types.ObjectId();
+        const doc = buildWorkspaceDoc({ members: [{ userId, role: "Admin" }] });
+        WorkspaceModel.findById.mockResolvedValueOnce(doc);
+
+        const result = await workspaceService.assertWorkspaceAccess(
+            doc._id.toString(),
+            userId.toString(),
+            { requireAdmin: true },
+        );
+
+        expect(result.member.role).toBe("Admin");
+    });
+
+    test("requireAdmin rejects a non-Admin Member", async () => {
+        const userId = new Types.ObjectId();
+        const doc = buildWorkspaceDoc({ members: [{ userId, role: "Member" }] });
+        WorkspaceModel.findById.mockResolvedValueOnce(doc);
+
+        await expect(
+            workspaceService.assertWorkspaceAccess(
+                doc._id.toString(),
+                userId.toString(),
+                {
+                    requireAdmin: true,
+                },
+            ),
+        ).rejects.toThrow(ForbiddenError);
+    });
+});
+
+describe("updateWorkspaceName", () => {
+    test("updates the name and saves when the caller is an Admin", async () => {
+        const adminId = new Types.ObjectId();
+        const doc = buildWorkspaceDoc({
+            members: [{ userId: adminId, role: "Admin" }],
+        });
         WorkspaceModel.findById.mockResolvedValueOnce(doc);
 
         const result = await workspaceService.updateWorkspaceName(
             doc._id.toString(),
+            adminId.toString(),
             "New Name",
         );
 
         expect(result.name).toBe("New Name");
         expect(doc.save).toHaveBeenCalledTimes(1);
     });
+
+    test("rejects a Member who is not an Admin", async () => {
+        const memberId = new Types.ObjectId();
+        const doc = buildWorkspaceDoc({
+            members: [{ userId: memberId, role: "Member" }],
+        });
+        WorkspaceModel.findById.mockResolvedValueOnce(doc);
+
+        await expect(
+            workspaceService.updateWorkspaceName(
+                doc._id.toString(),
+                memberId.toString(),
+                "New Name",
+            ),
+        ).rejects.toThrow(ForbiddenError);
+        expect(doc.save).not.toHaveBeenCalled();
+    });
 });
 
 describe("deleteWorkspace", () => {
     test("cascades deletes across boards, lists, and cards", async () => {
-        const doc = buildWorkspaceDoc();
+        const adminId = new Types.ObjectId();
+        const doc = buildWorkspaceDoc({
+            members: [{ userId: adminId, role: "Admin" }],
+        });
         const workspaceId = doc._id.toString();
         const boardId = new Types.ObjectId();
         const listId = new Types.ObjectId();
@@ -117,7 +199,7 @@ describe("deleteWorkspace", () => {
         BoardModel.deleteMany.mockResolvedValueOnce({});
         WorkspaceModel.deleteOne.mockResolvedValueOnce({});
 
-        await workspaceService.deleteWorkspace(workspaceId);
+        await workspaceService.deleteWorkspace(workspaceId, adminId.toString());
 
         expect(CardModel.deleteMany).toHaveBeenCalledWith({
             listId: { $in: [listId] },
@@ -132,101 +214,208 @@ describe("deleteWorkspace", () => {
     test("throws NotFoundError when the workspace does not exist", async () => {
         WorkspaceModel.findById.mockResolvedValueOnce(null);
 
-        await expect(workspaceService.deleteWorkspace("missing")).rejects.toThrow(
-            NotFoundError,
-        );
+        await expect(
+            workspaceService.deleteWorkspace(
+                "missing",
+                new Types.ObjectId().toString(),
+            ),
+        ).rejects.toThrow(NotFoundError);
+    });
+
+    test("rejects a Member who is not an Admin", async () => {
+        const memberId = new Types.ObjectId();
+        const doc = buildWorkspaceDoc({
+            members: [{ userId: memberId, role: "Member" }],
+        });
+        WorkspaceModel.findById.mockResolvedValueOnce(doc);
+
+        await expect(
+            workspaceService.deleteWorkspace(doc._id.toString(), memberId.toString()),
+        ).rejects.toThrow(ForbiddenError);
     });
 });
 
 describe("addMember", () => {
     test("adds a new member defaulting to Member role", async () => {
-        const doc = buildWorkspaceDoc();
+        const adminId = new Types.ObjectId();
+        const doc = buildWorkspaceDoc({
+            members: [{ userId: adminId, role: "Admin" }],
+        });
         WorkspaceModel.findById.mockResolvedValueOnce(doc);
-        const userId = new Types.ObjectId().toString();
-
-        const result = await workspaceService.addMember(doc._id.toString(), userId);
-
-        expect(result.members).toHaveLength(1);
-        expect(result.members[0]?.role).toBe("Member");
-    });
-
-    test("adds a new member with an explicit role", async () => {
-        const doc = buildWorkspaceDoc();
-        WorkspaceModel.findById.mockResolvedValueOnce(doc);
-        const userId = new Types.ObjectId().toString();
+        const targetUserId = new Types.ObjectId().toString();
 
         const result = await workspaceService.addMember(
             doc._id.toString(),
-            userId,
+            adminId.toString(),
+            targetUserId,
+        );
+
+        expect(result.members).toHaveLength(2);
+        expect(result.members[1]?.role).toBe("Member");
+    });
+
+    test("adds a new member with an explicit role", async () => {
+        const adminId = new Types.ObjectId();
+        const doc = buildWorkspaceDoc({
+            members: [{ userId: adminId, role: "Admin" }],
+        });
+        WorkspaceModel.findById.mockResolvedValueOnce(doc);
+        const targetUserId = new Types.ObjectId().toString();
+
+        const result = await workspaceService.addMember(
+            doc._id.toString(),
+            adminId.toString(),
+            targetUserId,
             "Admin",
         );
 
-        expect(result.members[0]?.role).toBe("Admin");
+        expect(result.members[1]?.role).toBe("Admin");
     });
 
     test("throws ConflictError when the user is already a member", async () => {
-        const userId = new Types.ObjectId();
-        const doc = buildWorkspaceDoc({ members: [{ userId, role: "Member" }] });
+        const adminId = new Types.ObjectId();
+        const targetUserId = new Types.ObjectId();
+        const doc = buildWorkspaceDoc({
+            members: [
+                { userId: adminId, role: "Admin" },
+                { userId: targetUserId, role: "Member" },
+            ],
+        });
         WorkspaceModel.findById.mockResolvedValueOnce(doc);
 
         await expect(
-            workspaceService.addMember(doc._id.toString(), userId.toString()),
+            workspaceService.addMember(
+                doc._id.toString(),
+                adminId.toString(),
+                targetUserId.toString(),
+            ),
         ).rejects.toThrow(ConflictError);
+    });
+
+    test("rejects a caller who is not an Admin", async () => {
+        const memberId = new Types.ObjectId();
+        const doc = buildWorkspaceDoc({
+            members: [{ userId: memberId, role: "Member" }],
+        });
+        WorkspaceModel.findById.mockResolvedValueOnce(doc);
+
+        await expect(
+            workspaceService.addMember(
+                doc._id.toString(),
+                memberId.toString(),
+                new Types.ObjectId().toString(),
+            ),
+        ).rejects.toThrow(ForbiddenError);
     });
 });
 
 describe("updateMemberRole", () => {
     test("updates an existing member's role", async () => {
-        const userId = new Types.ObjectId();
-        const doc = buildWorkspaceDoc({ members: [{ userId, role: "Member" }] });
+        const adminId = new Types.ObjectId();
+        const targetUserId = new Types.ObjectId();
+        const doc = buildWorkspaceDoc({
+            members: [
+                { userId: adminId, role: "Admin" },
+                { userId: targetUserId, role: "Member" },
+            ],
+        });
         WorkspaceModel.findById.mockResolvedValueOnce(doc);
 
         const result = await workspaceService.updateMemberRole(
             doc._id.toString(),
-            userId.toString(),
+            adminId.toString(),
+            targetUserId.toString(),
             "Admin",
         );
 
-        expect(result.members[0]?.role).toBe("Admin");
+        expect(result.members[1]?.role).toBe("Admin");
     });
 
-    test("throws NotFoundError when the user is not a member", async () => {
-        const doc = buildWorkspaceDoc();
+    test("throws NotFoundError when the target is not a member", async () => {
+        const adminId = new Types.ObjectId();
+        const doc = buildWorkspaceDoc({
+            members: [{ userId: adminId, role: "Admin" }],
+        });
         WorkspaceModel.findById.mockResolvedValueOnce(doc);
 
         await expect(
             workspaceService.updateMemberRole(
                 doc._id.toString(),
+                adminId.toString(),
                 new Types.ObjectId().toString(),
                 "Admin",
             ),
         ).rejects.toThrow(NotFoundError);
     });
+
+    test("rejects a caller who is not an Admin", async () => {
+        const memberId = new Types.ObjectId();
+        const doc = buildWorkspaceDoc({
+            members: [{ userId: memberId, role: "Member" }],
+        });
+        WorkspaceModel.findById.mockResolvedValueOnce(doc);
+
+        await expect(
+            workspaceService.updateMemberRole(
+                doc._id.toString(),
+                memberId.toString(),
+                new Types.ObjectId().toString(),
+                "Admin",
+            ),
+        ).rejects.toThrow(ForbiddenError);
+    });
 });
 
 describe("removeMember", () => {
     test("removes an existing member", async () => {
-        const userId = new Types.ObjectId();
-        const doc = buildWorkspaceDoc({ members: [{ userId, role: "Member" }] });
+        const adminId = new Types.ObjectId();
+        const targetUserId = new Types.ObjectId();
+        const doc = buildWorkspaceDoc({
+            members: [
+                { userId: adminId, role: "Admin" },
+                { userId: targetUserId, role: "Member" },
+            ],
+        });
         WorkspaceModel.findById.mockResolvedValueOnce(doc);
 
         const result = await workspaceService.removeMember(
             doc._id.toString(),
-            userId.toString(),
+            adminId.toString(),
+            targetUserId.toString(),
         );
 
-        expect(result.members).toHaveLength(0);
+        expect(result.members).toHaveLength(1);
     });
 
-    test("throws NotFoundError when the user is not a member", async () => {
-        const doc = buildWorkspaceDoc();
+    test("throws NotFoundError when the target is not a member", async () => {
+        const adminId = new Types.ObjectId();
+        const doc = buildWorkspaceDoc({
+            members: [{ userId: adminId, role: "Admin" }],
+        });
         WorkspaceModel.findById.mockResolvedValueOnce(doc);
 
         await expect(
             workspaceService.removeMember(
                 doc._id.toString(),
+                adminId.toString(),
                 new Types.ObjectId().toString(),
             ),
         ).rejects.toThrow(NotFoundError);
+    });
+
+    test("rejects a caller who is not an Admin", async () => {
+        const memberId = new Types.ObjectId();
+        const doc = buildWorkspaceDoc({
+            members: [{ userId: memberId, role: "Member" }],
+        });
+        WorkspaceModel.findById.mockResolvedValueOnce(doc);
+
+        await expect(
+            workspaceService.removeMember(
+                doc._id.toString(),
+                memberId.toString(),
+                new Types.ObjectId().toString(),
+            ),
+        ).rejects.toThrow(ForbiddenError);
     });
 });
