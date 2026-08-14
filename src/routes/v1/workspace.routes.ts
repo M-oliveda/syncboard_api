@@ -48,8 +48,9 @@ workspaceRouter.get(
 workspaceRouter.get(
     "/:workspaceId",
     asyncHandler(async (req, res) => {
-        const workspace = await workspaceService.getWorkspaceById(
+        const { workspace } = await workspaceService.assertWorkspaceAccess(
             req.params.workspaceId,
+            currentUserId(req),
         );
         res.json(successResponse(workspace));
     }),
@@ -62,6 +63,7 @@ workspaceRouter.patch(
         const { name } = req.body as UpdateWorkspaceInput;
         const workspace = await workspaceService.updateWorkspaceName(
             req.params.workspaceId,
+            currentUserId(req),
             name,
         );
         res.json(successResponse(workspace));
@@ -71,7 +73,10 @@ workspaceRouter.patch(
 workspaceRouter.delete(
     "/:workspaceId",
     asyncHandler(async (req, res) => {
-        await workspaceService.deleteWorkspace(req.params.workspaceId);
+        await workspaceService.deleteWorkspace(
+            req.params.workspaceId,
+            currentUserId(req),
+        );
         res.status(204).send();
     }),
 );
@@ -83,6 +88,7 @@ workspaceRouter.post(
         const { userId, role } = req.body as AddMemberInput;
         const workspace = await workspaceService.addMember(
             req.params.workspaceId,
+            currentUserId(req),
             userId,
             role,
         );
@@ -97,6 +103,7 @@ workspaceRouter.patch(
         const { role } = req.body as UpdateMemberRoleInput;
         const workspace = await workspaceService.updateMemberRole(
             req.params.workspaceId,
+            currentUserId(req),
             req.params.userId,
             role,
         );
@@ -109,6 +116,7 @@ workspaceRouter.delete(
     asyncHandler(async (req, res) => {
         const workspace = await workspaceService.removeMember(
             req.params.workspaceId,
+            currentUserId(req),
             req.params.userId,
         );
         res.json(successResponse(workspace));

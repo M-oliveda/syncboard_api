@@ -2,6 +2,7 @@ import { Router } from "express";
 import { requireAuth } from "@/middleware/auth.js";
 import { validate } from "@/middleware/validate.js";
 import { asyncHandler } from "@/utils/asyncHandler.js";
+import { currentUserId } from "@/utils/currentUser.js";
 import { collectionResponse, successResponse } from "@/utils/response.js";
 import * as listService from "@/services/list.service.js";
 import {
@@ -22,7 +23,12 @@ listsUnderBoardRouter.post(
     validate(CreateListSchema),
     asyncHandler(async (req, res) => {
         const { title, order } = req.body as CreateListInput;
-        const list = await listService.createList(req.params.boardId, title, order);
+        const list = await listService.createList(
+            req.params.boardId,
+            currentUserId(req),
+            title,
+            order,
+        );
         res.status(201).json(successResponse(list));
     }),
 );
@@ -32,6 +38,7 @@ listsUnderBoardRouter.get(
     asyncHandler(async (req, res) => {
         const { items, page, limit, total } = await listService.listListsForBoard(
             req.params.boardId,
+            currentUserId(req),
             req.query,
         );
         res.json(collectionResponse(items, page, limit, total));
@@ -48,7 +55,10 @@ listRouter.use("/:listId/cards", cardsUnderListRouter);
 listRouter.get(
     "/:listId",
     asyncHandler(async (req, res) => {
-        const list = await listService.getListById(req.params.listId);
+        const { list } = await listService.assertListAccess(
+            req.params.listId,
+            currentUserId(req),
+        );
         res.json(successResponse(list));
     }),
 );
@@ -58,7 +68,11 @@ listRouter.patch(
     validate(UpdateListSchema),
     asyncHandler(async (req, res) => {
         const updates = req.body as UpdateListInput;
-        const list = await listService.updateList(req.params.listId, updates);
+        const list = await listService.updateList(
+            req.params.listId,
+            currentUserId(req),
+            updates,
+        );
         res.json(successResponse(list));
     }),
 );
@@ -66,7 +80,7 @@ listRouter.patch(
 listRouter.delete(
     "/:listId",
     asyncHandler(async (req, res) => {
-        await listService.deleteList(req.params.listId);
+        await listService.deleteList(req.params.listId, currentUserId(req));
         res.status(204).send();
     }),
 );

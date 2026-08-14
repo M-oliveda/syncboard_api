@@ -2,6 +2,7 @@ import { describe, test, expect } from "@jest/globals";
 import request from "supertest";
 import { app } from "@/app.js";
 import { createAuthenticatedUser } from "../helpers/auth.js";
+import { createWorkspaceWithMember } from "../helpers/workspace.js";
 
 const createWorkspace = async (token: string, name = "Workspace") => {
     const response = await request(app)
@@ -118,5 +119,67 @@ describe("Boards", () => {
             .get(`/api/v1/boards/${board.body.data._id}`)
             .set("Authorization", `Bearer ${token}`)
             .expect(404);
+    });
+
+    describe("RBAC", () => {
+        test("rejects a non-member creating, reading, or listing boards", async () => {
+            const { ownerToken, workspaceId } = await createWorkspaceWithMember(app);
+            const board = await request(app)
+                .post(`/api/v1/workspaces/${workspaceId}/boards`)
+                .set("Authorization", `Bearer ${ownerToken}`)
+                .send({ title: "Board" });
+            const { token: strangerToken } = await createAuthenticatedUser();
+
+            await request(app)
+                .post(`/api/v1/workspaces/${workspaceId}/boards`)
+                .set("Authorization", `Bearer ${strangerToken}`)
+                .send({ title: "Intruder board" })
+                .expect(403);
+
+            await request(app)
+                .get(`/api/v1/workspaces/${workspaceId}/boards`)
+                .set("Authorization", `Bearer ${strangerToken}`)
+                .expect(403);
+
+            await request(app)
+                .get(`/api/v1/boards/${board.body.data._id}`)
+                .set("Authorization", `Bearer ${strangerToken}`)
+                .expect(403);
+
+            await request(app)
+                .patch(`/api/v1/boards/${board.body.data._id}`)
+                .set("Authorization", `Bearer ${strangerToken}`)
+                .send({ title: "Hijacked" })
+                .expect(403);
+
+            await request(app)
+                .delete(`/api/v1/boards/${board.body.data._id}`)
+                .set("Authorization", `Bearer ${strangerToken}`)
+                .expect(403);
+        });
+
+        test("allows a Member (non-Admin) to create, update, and delete boards", async () => {
+            const { memberToken, workspaceId } = await createWorkspaceWithMember(
+                app,
+                "Member",
+            );
+
+            const created = await request(app)
+                .post(`/api/v1/workspaces/${workspaceId}/boards`)
+                .set("Authorization", `Bearer ${memberToken}`)
+                .send({ title: "Member's board" })
+                .expect(201);
+
+            await request(app)
+                .patch(`/api/v1/boards/${created.body.data._id}`)
+                .set("Authorization", `Bearer ${memberToken}`)
+                .send({ title: "Renamed by member" })
+                .expect(200);
+
+            await request(app)
+                .delete(`/api/v1/boards/${created.body.data._id}`)
+                .set("Authorization", `Bearer ${memberToken}`)
+                .expect(204);
+        });
     });
 });

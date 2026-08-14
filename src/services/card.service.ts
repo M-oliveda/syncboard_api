@@ -3,7 +3,7 @@ import { CardModel } from "@/models/card.model.js";
 import { NotFoundError } from "@/utils/errors.js";
 import { parsePagination } from "@/utils/pagination.js";
 import { computeOrderBetween } from "@/utils/reorder.js";
-import { getListById } from "@/services/list.service.js";
+import * as listService from "@/services/list.service.js";
 import type { CreateCardInput, UpdateCardInput } from "@/routes/v1/card.schema.js";
 
 const nextAppendOrder = async (listId: string): Promise<number> => {
@@ -13,8 +13,34 @@ const nextAppendOrder = async (listId: string): Promise<number> => {
     return computeOrderBetween(last?.order ?? null, null);
 };
 
-export const createCard = async (listId: string, input: CreateCardInput) => {
-    await getListById(listId);
+/** Raw fetch — no authorization check. Use assertCardAccess for anything
+ * reached from a route. */
+export const getCardById = async (cardId: string) => {
+    const card = await CardModel.findById(cardId);
+
+    if (!card) {
+        throw new NotFoundError(`Card ${cardId} not found`);
+    }
+
+    return card;
+};
+
+export const assertCardAccess = async (cardId: string, userId: string) => {
+    const card = await getCardById(cardId);
+    const { list, board, workspace, member } = await listService.assertListAccess(
+        card.listId.toString(),
+        userId,
+    );
+
+    return { card, list, board, workspace, member };
+};
+
+export const createCard = async (
+    listId: string,
+    userId: string,
+    input: CreateCardInput,
+) => {
+    await listService.assertListAccess(listId, userId);
     const order = input.order ?? (await nextAppendOrder(listId));
 
     return CardModel.create({
@@ -30,9 +56,10 @@ export const createCard = async (listId: string, input: CreateCardInput) => {
 
 export const listCardsForList = async (
     listId: string,
+    userId: string,
     query: Record<string, unknown>,
 ) => {
-    await getListById(listId);
+    await listService.assertListAccess(listId, userId);
     const { page, limit, skip, sort } = parsePagination(query, "order");
     const filter = { listId };
 
@@ -44,21 +71,15 @@ export const listCardsForList = async (
     return { items, page, limit, total };
 };
 
-export const getCardById = async (cardId: string) => {
-    const card = await CardModel.findById(cardId);
-
-    if (!card) {
-        throw new NotFoundError(`Card ${cardId} not found`);
-    }
-
-    return card;
-};
-
-export const updateCard = async (cardId: string, updates: UpdateCardInput) => {
-    const card = await getCardById(cardId);
+export const updateCard = async (
+    cardId: string,
+    userId: string,
+    updates: UpdateCardInput,
+) => {
+    const { card } = await assertCardAccess(cardId, userId);
 
     if (updates.listId !== undefined && updates.listId !== card.listId.toString()) {
-        await getListById(updates.listId);
+        await listService.assertListAccess(updates.listId, userId);
         card.listId = new Types.ObjectId(updates.listId);
         card.order = updates.order ?? (await nextAppendOrder(updates.listId));
     } else if (updates.order !== undefined) {
@@ -89,7 +110,7 @@ export const updateCard = async (cardId: string, updates: UpdateCardInput) => {
     return card;
 };
 
-export const deleteCard = async (cardId: string): Promise<void> => {
-    await getCardById(cardId);
-    await CardModel.deleteOne({ _id: cardId });
+export const deleteCard = async (cardId: string, userId: string): Promise<void> => {
+    const { card } = await assertCardAccess(cardId, userId);
+    await CardModel.deleteOne({ _id: card._id });
 };

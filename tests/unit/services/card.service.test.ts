@@ -11,13 +11,13 @@ const CardModel = {
     findById: mockFn(),
     deleteOne: mockFn(),
 };
-const getListById = mockFn();
+const assertListAccess = mockFn();
 
 jest.unstable_mockModule("@/models/card.model.js", () => ({ CardModel }));
-jest.unstable_mockModule("@/services/list.service.js", () => ({ getListById }));
+jest.unstable_mockModule("@/services/list.service.js", () => ({ assertListAccess }));
 
 const cardService = await import("@/services/card.service.js");
-const { NotFoundError } = await import("@/utils/errors.js");
+const { ForbiddenError, NotFoundError } = await import("@/utils/errors.js");
 
 const buildCardDoc = (overrides: Record<string, unknown> = {}) => ({
     _id: new Types.ObjectId(),
@@ -34,19 +34,28 @@ const buildCardDoc = (overrides: Record<string, unknown> = {}) => ({
     ...overrides,
 });
 
+const resolveAccess = () =>
+    assertListAccess.mockResolvedValueOnce({
+        list: {},
+        board: {},
+        workspace: {},
+        member: {},
+    });
+
 beforeEach(() => {
     jest.clearAllMocks();
 });
 
 describe("createCard", () => {
-    test("verifies the list exists and defaults content fields", async () => {
+    test("verifies list access and defaults content fields", async () => {
         const listId = new Types.ObjectId().toString();
-        getListById.mockResolvedValueOnce({});
+        const userId = new Types.ObjectId().toString();
+        resolveAccess();
         CardModel.create.mockResolvedValueOnce({});
 
-        await cardService.createCard(listId, { title: "New card", order: 3 });
+        await cardService.createCard(listId, userId, { title: "New card", order: 3 });
 
-        expect(getListById).toHaveBeenCalledWith(listId);
+        expect(assertListAccess).toHaveBeenCalledWith(listId, userId);
         expect(CardModel.create).toHaveBeenCalledWith({
             listId,
             title: "New card",
@@ -60,11 +69,13 @@ describe("createCard", () => {
 
     test("appends to the end when no order is given", async () => {
         const listId = new Types.ObjectId().toString();
-        getListById.mockResolvedValueOnce({});
+        resolveAccess();
         CardModel.findOne.mockReturnValueOnce(createFakeQuery({ order: 2 }));
         CardModel.create.mockResolvedValueOnce({});
 
-        await cardService.createCard(listId, { title: "New card" });
+        await cardService.createCard(listId, new Types.ObjectId().toString(), {
+            title: "New card",
+        });
 
         expect(CardModel.create).toHaveBeenCalledWith(
             expect.objectContaining({ order: 3 }),
@@ -73,11 +84,13 @@ describe("createCard", () => {
 
     test("appends as the first card when the list is empty", async () => {
         const listId = new Types.ObjectId().toString();
-        getListById.mockResolvedValueOnce({});
+        resolveAccess();
         CardModel.findOne.mockReturnValueOnce(createFakeQuery(null));
         CardModel.create.mockResolvedValueOnce({});
 
-        await cardService.createCard(listId, { title: "First card" });
+        await cardService.createCard(listId, new Types.ObjectId().toString(), {
+            title: "First card",
+        });
 
         expect(CardModel.create).toHaveBeenCalledWith(
             expect.objectContaining({ order: 1 }),
@@ -86,11 +99,11 @@ describe("createCard", () => {
 
     test("preserves explicit content fields when provided", async () => {
         const listId = new Types.ObjectId().toString();
-        getListById.mockResolvedValueOnce({});
+        resolveAccess();
         CardModel.create.mockResolvedValueOnce({});
         const assigneeId = new Types.ObjectId().toString();
 
-        await cardService.createCard(listId, {
+        await cardService.createCard(listId, new Types.ObjectId().toString(), {
             title: "New card",
             description: "Details",
             order: 1,
@@ -109,16 +122,29 @@ describe("createCard", () => {
             checklist: [{ text: "Step 1", done: true }],
         });
     });
+
+    test("propagates ForbiddenError for a non-member", async () => {
+        assertListAccess.mockRejectedValueOnce(new ForbiddenError("nope"));
+
+        await expect(
+            cardService.createCard(
+                new Types.ObjectId().toString(),
+                new Types.ObjectId().toString(),
+                { title: "New card" },
+            ),
+        ).rejects.toThrow(ForbiddenError);
+    });
 });
 
 describe("listCardsForList", () => {
     test("returns paginated cards sorted by order by default", async () => {
-        getListById.mockResolvedValueOnce({});
+        resolveAccess();
         const items = [buildCardDoc()];
         CardModel.find.mockReturnValueOnce(createFakeQuery(items));
         CardModel.countDocuments.mockResolvedValueOnce(1);
 
         const result = await cardService.listCardsForList(
+            new Types.ObjectId().toString(),
             new Types.ObjectId().toString(),
             {},
         );
@@ -140,19 +166,51 @@ describe("getCardById", () => {
     });
 });
 
+describe("assertCardAccess", () => {
+    test("resolves card + list access when the caller has access", async () => {
+        const doc = buildCardDoc();
+        const userId = new Types.ObjectId().toString();
+        CardModel.findById.mockResolvedValueOnce(doc);
+        resolveAccess();
+
+        const result = await cardService.assertCardAccess(doc._id.toString(), userId);
+
+        expect(assertListAccess).toHaveBeenCalledWith(doc.listId.toString(), userId);
+        expect(result.card).toBe(doc);
+    });
+
+    test("propagates ForbiddenError for a non-member", async () => {
+        const doc = buildCardDoc();
+        CardModel.findById.mockResolvedValueOnce(doc);
+        assertListAccess.mockRejectedValueOnce(new ForbiddenError("nope"));
+
+        await expect(
+            cardService.assertCardAccess(
+                doc._id.toString(),
+                new Types.ObjectId().toString(),
+            ),
+        ).rejects.toThrow(ForbiddenError);
+    });
+});
+
 describe("updateCard", () => {
     test("updates content fields in place", async () => {
         const doc = buildCardDoc();
         CardModel.findById.mockResolvedValueOnce(doc);
+        resolveAccess();
         const assigneeId = new Types.ObjectId().toString();
 
-        const result = await cardService.updateCard(doc._id.toString(), {
-            title: "Updated title",
-            description: "Updated description",
-            assignees: [assigneeId],
-            labels: ["bug"],
-            checklist: [{ text: "Step 1", done: false }],
-        });
+        const result = await cardService.updateCard(
+            doc._id.toString(),
+            new Types.ObjectId().toString(),
+            {
+                title: "Updated title",
+                description: "Updated description",
+                assignees: [assigneeId],
+                labels: ["bug"],
+                checklist: [{ text: "Step 1", done: false }],
+            },
+        );
 
         expect(result.title).toBe("Updated title");
         expect(result.description).toBe("Updated description");
@@ -165,24 +223,31 @@ describe("updateCard", () => {
     test("updates the order in place without moving lists", async () => {
         const doc = buildCardDoc({ order: 1 });
         CardModel.findById.mockResolvedValueOnce(doc);
+        resolveAccess();
 
-        const result = await cardService.updateCard(doc._id.toString(), { order: 4 });
+        const result = await cardService.updateCard(
+            doc._id.toString(),
+            new Types.ObjectId().toString(),
+            { order: 4 },
+        );
 
         expect(result.order).toBe(4);
     });
 
     test("moves the card to a new list with an explicit order", async () => {
         const doc = buildCardDoc();
+        const userId = new Types.ObjectId().toString();
         CardModel.findById.mockResolvedValueOnce(doc);
+        resolveAccess();
         const newListId = new Types.ObjectId().toString();
-        getListById.mockResolvedValueOnce({});
+        resolveAccess();
 
-        const result = await cardService.updateCard(doc._id.toString(), {
+        const result = await cardService.updateCard(doc._id.toString(), userId, {
             listId: newListId,
             order: 2.5,
         });
 
-        expect(getListById).toHaveBeenCalledWith(newListId);
+        expect(assertListAccess).toHaveBeenCalledWith(newListId, userId);
         expect(result.listId).toEqual(new Types.ObjectId(newListId));
         expect(result.order).toBe(2.5);
     });
@@ -190,13 +255,16 @@ describe("updateCard", () => {
     test("moves the card to a new list appending to the end when order is omitted", async () => {
         const doc = buildCardDoc();
         CardModel.findById.mockResolvedValueOnce(doc);
+        resolveAccess();
         const newListId = new Types.ObjectId().toString();
-        getListById.mockResolvedValueOnce({});
+        resolveAccess();
         CardModel.findOne.mockReturnValueOnce(createFakeQuery({ order: 5 }));
 
-        const result = await cardService.updateCard(doc._id.toString(), {
-            listId: newListId,
-        });
+        const result = await cardService.updateCard(
+            doc._id.toString(),
+            new Types.ObjectId().toString(),
+            { listId: newListId },
+        );
 
         expect(result.order).toBe(6);
     });
@@ -204,13 +272,35 @@ describe("updateCard", () => {
     test("treats an unchanged listId as a plain order update, not a move", async () => {
         const doc = buildCardDoc();
         CardModel.findById.mockResolvedValueOnce(doc);
+        resolveAccess();
 
-        await cardService.updateCard(doc._id.toString(), {
-            listId: doc.listId.toString(),
-            order: 9,
-        });
+        await cardService.updateCard(
+            doc._id.toString(),
+            new Types.ObjectId().toString(),
+            {
+                listId: doc.listId.toString(),
+                order: 9,
+            },
+        );
 
-        expect(getListById).not.toHaveBeenCalled();
+        expect(assertListAccess).toHaveBeenCalledTimes(1);
+    });
+
+    test("rejects moving the card into a list the caller cannot access", async () => {
+        const doc = buildCardDoc();
+        CardModel.findById.mockResolvedValueOnce(doc);
+        resolveAccess();
+        assertListAccess.mockRejectedValueOnce(new ForbiddenError("nope"));
+
+        await expect(
+            cardService.updateCard(
+                doc._id.toString(),
+                new Types.ObjectId().toString(),
+                {
+                    listId: new Types.ObjectId().toString(),
+                },
+            ),
+        ).rejects.toThrow(ForbiddenError);
     });
 });
 
@@ -219,15 +309,18 @@ describe("deleteCard", () => {
         const doc = buildCardDoc();
         const cardId = doc._id.toString();
         CardModel.findById.mockResolvedValueOnce(doc);
+        resolveAccess();
         CardModel.deleteOne.mockResolvedValueOnce({});
 
-        await cardService.deleteCard(cardId);
+        await cardService.deleteCard(cardId, new Types.ObjectId().toString());
 
-        expect(CardModel.deleteOne).toHaveBeenCalledWith({ _id: cardId });
+        expect(CardModel.deleteOne).toHaveBeenCalledWith({ _id: doc._id });
     });
 
     test("throws NotFoundError when the card does not exist", async () => {
         CardModel.findById.mockResolvedValueOnce(null);
-        await expect(cardService.deleteCard("missing")).rejects.toThrow(NotFoundError);
+        await expect(
+            cardService.deleteCard("missing", new Types.ObjectId().toString()),
+        ).rejects.toThrow(NotFoundError);
     });
 });

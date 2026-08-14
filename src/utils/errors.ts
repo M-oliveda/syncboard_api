@@ -32,6 +32,12 @@ export class NotFoundError extends AppError {
     readonly title = "Not Found";
 }
 
+export class ForbiddenError extends AppError {
+    readonly status = 403;
+    readonly type = `${ERROR_BASE_URI}/forbidden`;
+    readonly title = "Forbidden";
+}
+
 export class ConflictError extends AppError {
     readonly status = 409;
     readonly type = `${ERROR_BASE_URI}/conflict`;

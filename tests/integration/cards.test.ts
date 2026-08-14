@@ -2,6 +2,7 @@ import { describe, test, expect } from "@jest/globals";
 import request from "supertest";
 import { app } from "@/app.js";
 import { createAuthenticatedUser } from "../helpers/auth.js";
+import { createWorkspaceWithMember } from "../helpers/workspace.js";
 
 const createBoardWithLists = async (token: string) => {
     const workspace = await request(app)
@@ -157,5 +158,108 @@ describe("Cards", () => {
             .get(`/api/v1/cards/${card.body.data._id}`)
             .set("Authorization", `Bearer ${token}`)
             .expect(404);
+    });
+
+    describe("RBAC", () => {
+        const createListInWorkspace = async (token: string, workspaceId: string) => {
+            const board = await request(app)
+                .post(`/api/v1/workspaces/${workspaceId}/boards`)
+                .set("Authorization", `Bearer ${token}`)
+                .send({ title: "Board" })
+                .expect(201);
+            const list = await request(app)
+                .post(`/api/v1/boards/${board.body.data._id}/lists`)
+                .set("Authorization", `Bearer ${token}`)
+                .send({ title: "To Do" })
+                .expect(201);
+            return list.body.data._id as string;
+        };
+
+        test("rejects a non-member creating, reading, or listing cards", async () => {
+            const { ownerToken, workspaceId } = await createWorkspaceWithMember(app);
+            const listId = await createListInWorkspace(ownerToken, workspaceId);
+            const card = await request(app)
+                .post(`/api/v1/lists/${listId}/cards`)
+                .set("Authorization", `Bearer ${ownerToken}`)
+                .send({ title: "Card" });
+            const { token: strangerToken } = await createAuthenticatedUser();
+
+            await request(app)
+                .post(`/api/v1/lists/${listId}/cards`)
+                .set("Authorization", `Bearer ${strangerToken}`)
+                .send({ title: "Intruder card" })
+                .expect(403);
+
+            await request(app)
+                .get(`/api/v1/lists/${listId}/cards`)
+                .set("Authorization", `Bearer ${strangerToken}`)
+                .expect(403);
+
+            await request(app)
+                .get(`/api/v1/cards/${card.body.data._id}`)
+                .set("Authorization", `Bearer ${strangerToken}`)
+                .expect(403);
+
+            await request(app)
+                .patch(`/api/v1/cards/${card.body.data._id}`)
+                .set("Authorization", `Bearer ${strangerToken}`)
+                .send({ title: "Hijacked" })
+                .expect(403);
+
+            await request(app)
+                .delete(`/api/v1/cards/${card.body.data._id}`)
+                .set("Authorization", `Bearer ${strangerToken}`)
+                .expect(403);
+        });
+
+        test("rejects moving a card into a list the caller cannot access", async () => {
+            const { ownerToken, memberToken, workspaceId } =
+                await createWorkspaceWithMember(app, "Member");
+            const listId = await createListInWorkspace(ownerToken, workspaceId);
+            const card = await request(app)
+                .post(`/api/v1/lists/${listId}/cards`)
+                .set("Authorization", `Bearer ${memberToken}`)
+                .send({ title: "Card" })
+                .expect(201);
+
+            const { token: strangerToken } = await createAuthenticatedUser();
+            const strangerWorkspace = await request(app)
+                .post("/api/v1/workspaces")
+                .set("Authorization", `Bearer ${strangerToken}`)
+                .send({ name: "Stranger workspace" });
+            const foreignListId = await createListInWorkspace(
+                strangerToken,
+                strangerWorkspace.body.data._id as string,
+            );
+
+            await request(app)
+                .patch(`/api/v1/cards/${card.body.data._id}`)
+                .set("Authorization", `Bearer ${memberToken}`)
+                .send({ listId: foreignListId })
+                .expect(403);
+        });
+
+        test("allows a Member (non-Admin) to create, update, and delete cards", async () => {
+            const { ownerToken, memberToken, workspaceId } =
+                await createWorkspaceWithMember(app, "Member");
+            const listId = await createListInWorkspace(ownerToken, workspaceId);
+
+            const created = await request(app)
+                .post(`/api/v1/lists/${listId}/cards`)
+                .set("Authorization", `Bearer ${memberToken}`)
+                .send({ title: "Member's card" })
+                .expect(201);
+
+            await request(app)
+                .patch(`/api/v1/cards/${created.body.data._id}`)
+                .set("Authorization", `Bearer ${memberToken}`)
+                .send({ title: "Renamed by member" })
+                .expect(200);
+
+            await request(app)
+                .delete(`/api/v1/cards/${created.body.data._id}`)
+                .set("Authorization", `Bearer ${memberToken}`)
+                .expect(204);
+        });
     });
 });

@@ -21,4 +21,22 @@ describe("UserModel", () => {
         const user = new UserModel({ email: "test@example.com", passwordHash: "hash" });
         expect(user.validateSync()).toBeUndefined();
     });
+
+    test("toJSON strips all sensitive fields", () => {
+        const user = new UserModel({
+            email: "test@example.com",
+            passwordHash: "hash",
+            refreshTokenHash: "refresh-hash",
+            passwordResetTokenHash: "reset-hash",
+            passwordResetTokenExpiresAt: new Date(),
+        });
+
+        const json = user.toJSON();
+
+        expect(json.passwordHash).toBeUndefined();
+        expect(json.refreshTokenHash).toBeUndefined();
+        expect(json.passwordResetTokenHash).toBeUndefined();
+        expect(json.passwordResetTokenExpiresAt).toBeUndefined();
+        expect(json.email).toBe("test@example.com");
+    });
 });

@@ -2,6 +2,7 @@ import { describe, test, expect } from "@jest/globals";
 import request from "supertest";
 import { app } from "@/app.js";
 import { createAuthenticatedUser } from "../helpers/auth.js";
+import { createWorkspaceWithMember } from "../helpers/workspace.js";
 
 describe("Workspaces", () => {
     test("rejects requests without a bearer token", async () => {
@@ -214,5 +215,82 @@ describe("Workspaces", () => {
             .get(`/api/v1/cards/${card.body.data._id}`)
             .set("Authorization", `Bearer ${token}`)
             .expect(404);
+    });
+
+    describe("RBAC", () => {
+        test("rejects a non-member reading a workspace", async () => {
+            const { ownerToken } = await createWorkspaceWithMember(app);
+            const created = await request(app)
+                .post("/api/v1/workspaces")
+                .set("Authorization", `Bearer ${ownerToken}`)
+                .send({ name: "Private" });
+            const { token: strangerToken } = await createAuthenticatedUser();
+
+            const response = await request(app)
+                .get(`/api/v1/workspaces/${created.body.data._id}`)
+                .set("Authorization", `Bearer ${strangerToken}`)
+                .expect(403);
+
+            expect(response.body.type).toBe("https://syncboard.dev/errors/forbidden");
+        });
+
+        test("rejects a Member (non-Admin) renaming or deleting the workspace", async () => {
+            const { memberToken, workspaceId } = await createWorkspaceWithMember(
+                app,
+                "Member",
+            );
+
+            await request(app)
+                .patch(`/api/v1/workspaces/${workspaceId}`)
+                .set("Authorization", `Bearer ${memberToken}`)
+                .send({ name: "Renamed" })
+                .expect(403);
+
+            await request(app)
+                .delete(`/api/v1/workspaces/${workspaceId}`)
+                .set("Authorization", `Bearer ${memberToken}`)
+                .expect(403);
+        });
+
+        test("rejects a Member (non-Admin) managing members", async () => {
+            const { memberToken, workspaceId } = await createWorkspaceWithMember(
+                app,
+                "Member",
+            );
+            const { user: someoneElse } = await createAuthenticatedUser();
+
+            await request(app)
+                .post(`/api/v1/workspaces/${workspaceId}/members`)
+                .set("Authorization", `Bearer ${memberToken}`)
+                .send({ userId: someoneElse._id.toString() })
+                .expect(403);
+
+            await request(app)
+                .patch(
+                    `/api/v1/workspaces/${workspaceId}/members/${someoneElse._id.toString()}`,
+                )
+                .set("Authorization", `Bearer ${memberToken}`)
+                .send({ role: "Admin" })
+                .expect(403);
+
+            await request(app)
+                .delete(
+                    `/api/v1/workspaces/${workspaceId}/members/${someoneElse._id.toString()}`,
+                )
+                .set("Authorization", `Bearer ${memberToken}`)
+                .expect(403);
+        });
+
+        test("allows a Member (non-Admin) to read the workspace", async () => {
+            const { memberToken, workspaceId } = await createWorkspaceWithMember(
+                app,
+                "Member",
+            );
+
+            await request(app)
+                .get(`/api/v1/workspaces/${workspaceId}`)
+                .set("Authorization", `Bearer ${memberToken}`)
+                .expect(200);
+        });
     });
 });

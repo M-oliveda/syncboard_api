@@ -3,20 +3,169 @@ info:
   title: SyncBoard API
   version: "1.0.0"
   description: >
-    Phase 1 — stateless REST API for Workspaces, Boards, Lists, and Cards.
-    Every route requires a bearer access token; until Phase 2 ships
-    register/login, mint one with `scripts/mint-test-token.ts`.
+    Stateless REST API for auth, Workspaces, Boards, Lists, and Cards. Every
+    route except /auth/register, /auth/login, /auth/refresh,
+    /auth/forgot-password, and /auth/reset-password requires a bearer access
+    token minted via /auth/register or /auth/login. Workspace/board/list/card
+    routes additionally require the caller to be a member (Admin or Member)
+    of the resource's workspace; a subset of workspace routes require the
+    Admin role specifically.
 servers:
   - url: /api/v1
 security:
   - bearerAuth: []
 tags:
+  - name: Auth
   - name: Workspaces
   - name: Boards
   - name: Lists
   - name: Cards
 
 paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Create an account and issue tokens
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthEnvelope"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Exchange credentials for an access + refresh token pair
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthEnvelope"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Rotate a refresh token for a new access + refresh token pair
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenPairEnvelope"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Revoke the current refresh token
+      responses:
+        "204":
+          description: No Content
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Request a password reset email (always accepted, no enumeration)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "202":
+          description: Accepted
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Complete a password reset with a single-use token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, newPassword]
+              properties:
+                token:
+                  type: string
+                newPassword:
+                  type: string
+                  minLength: 8
+      responses:
+        "204":
+          description: No Content
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
   /workspaces:
     post:
       tags: [Workspaces]
@@ -72,11 +221,13 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/WorkspaceEnvelope"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
     patch:
       tags: [Workspaces]
-      summary: Update workspace name
+      summary: Update workspace name (Admin only)
       requestBody:
         required: true
         content:
@@ -94,14 +245,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/WorkspaceEnvelope"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
     delete:
       tags: [Workspaces]
-      summary: Delete a workspace (cascades boards/lists/cards)
+      summary: Delete a workspace (Admin only; cascades boards/lists/cards)
       responses:
         "204":
           description: No Content
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -110,7 +265,7 @@ paths:
       - $ref: "#/components/parameters/WorkspaceId"
     post:
       tags: [Workspaces]
-      summary: Add a member
+      summary: Add a member (Admin only)
       requestBody:
         required: true
         content:
@@ -131,6 +286,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/WorkspaceEnvelope"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "409":
           $ref: "#/components/responses/Conflict"
 
@@ -144,7 +301,7 @@ paths:
           type: string
     patch:
       tags: [Workspaces]
-      summary: Update a member's role
+      summary: Update a member's role (Admin only)
       requestBody:
         required: true
         content:
@@ -163,11 +320,13 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/WorkspaceEnvelope"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
     delete:
       tags: [Workspaces]
-      summary: Remove a member
+      summary: Remove a member (Admin only)
       responses:
         "200":
           description: OK
@@ -175,6 +334,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/WorkspaceEnvelope"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -201,6 +362,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BoardEnvelope"
+        "403":
+          $ref: "#/components/responses/Forbidden"
     get:
       tags: [Boards]
       summary: List boards in a workspace
@@ -215,6 +378,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BoardCollectionEnvelope"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /boards/{boardId}:
     parameters:
@@ -245,6 +410,8 @@ paths:
                         type: array
                         items:
                           $ref: "#/components/schemas/Card"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
     patch:
@@ -267,12 +434,16 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BoardEnvelope"
+        "403":
+          $ref: "#/components/responses/Forbidden"
     delete:
       tags: [Boards]
       summary: Delete a board (cascades lists/cards)
       responses:
         "204":
           description: No Content
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -301,6 +472,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ListEnvelope"
+        "403":
+          $ref: "#/components/responses/Forbidden"
     get:
       tags: [Lists]
       summary: List lists on a board
@@ -315,6 +488,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ListCollectionEnvelope"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /lists/{listId}:
     parameters:
@@ -329,6 +504,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ListEnvelope"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
     patch:
@@ -352,12 +529,16 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ListEnvelope"
+        "403":
+          $ref: "#/components/responses/Forbidden"
     delete:
       tags: [Lists]
       summary: Delete a list (cascades cards)
       responses:
         "204":
           description: No Content
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -405,6 +586,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CardEnvelope"
+        "403":
+          $ref: "#/components/responses/Forbidden"
     get:
       tags: [Cards]
       summary: List cards in a list
@@ -419,6 +602,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CardCollectionEnvelope"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /cards/{cardId}:
     parameters:
@@ -433,11 +618,15 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CardEnvelope"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
     patch:
       tags: [Cards]
-      summary: Update content and/or move (listId + order)
+      summary: >-
+        Update content and/or move (listId + order). Moving into a list the
+        caller cannot access returns 403.
       requestBody:
         required: true
         content:
@@ -477,12 +666,16 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CardEnvelope"
+        "403":
+          $ref: "#/components/responses/Forbidden"
     delete:
       tags: [Cards]
       summary: Delete a card
       responses:
         "204":
           description: No Content
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -549,6 +742,14 @@ components:
         application/problem+json:
           schema:
             $ref: "#/components/schemas/Problem"
+    Forbidden:
+      description: >
+        Authenticated, but not a member (or not an Admin, where required) of
+        the resource's workspace
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
     ValidationError:
       description: Request body failed validation
       content:
@@ -576,6 +777,49 @@ components:
           type: string
         instance:
           type: string
+
+    User:
+      type: object
+      properties:
+        _id:
+          type: string
+        email:
+          type: string
+          format: email
+        createdAt:
+          type: string
+          format: date-time
+
+    TokenPair:
+      type: object
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+
+    AuthEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            user:
+              $ref: "#/components/schemas/User"
+            accessToken:
+              type: string
+            refreshToken:
+              type: string
+
+    TokenPairEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: "#/components/schemas/TokenPair"
 
     WorkspaceMember:
       type: object
