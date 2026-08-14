@@ -1,0 +1,753 @@
+openapi: 3.0.3
+info:
+  title: SyncBoard API
+  version: "1.0.0"
+  description: >
+    Phase 1 — stateless REST API for Workspaces, Boards, Lists, and Cards.
+    Every route requires a bearer access token; until Phase 2 ships
+    register/login, mint one with `scripts/mint-test-token.ts`.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: Workspaces
+  - name: Boards
+  - name: Lists
+  - name: Cards
+
+paths:
+  /workspaces:
+    post:
+      tags: [Workspaces]
+      summary: Create a workspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+    get:
+      tags: [Workspaces]
+      summary: List the current user's workspaces
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Sort"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceCollectionEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /workspaces/{workspaceId}:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+    get:
+      tags: [Workspaces]
+      summary: Get a single workspace
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceEnvelope"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Workspaces]
+      summary: Update workspace name
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceEnvelope"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Workspaces]
+      summary: Delete a workspace (cascades boards/lists/cards)
+      responses:
+        "204":
+          description: No Content
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /workspaces/{workspaceId}/members:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+    post:
+      tags: [Workspaces]
+      summary: Add a member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId:
+                  type: string
+                role:
+                  type: string
+                  enum: [Admin, Member]
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceEnvelope"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /workspaces/{workspaceId}/members/{userId}:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+    patch:
+      tags: [Workspaces]
+      summary: Update a member's role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role:
+                  type: string
+                  enum: [Admin, Member]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceEnvelope"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Workspaces]
+      summary: Remove a member
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceEnvelope"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /workspaces/{workspaceId}/boards:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+    post:
+      tags: [Boards]
+      summary: Create a board in a workspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:
+                  type: string
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BoardEnvelope"
+    get:
+      tags: [Boards]
+      summary: List boards in a workspace
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Sort"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BoardCollectionEnvelope"
+
+  /boards/{boardId}:
+    parameters:
+      - $ref: "#/components/parameters/BoardId"
+    get:
+      tags: [Boards]
+      summary: Full board state (board + lists + cards)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      board:
+                        $ref: "#/components/schemas/Board"
+                      lists:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/List"
+                      cards:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Card"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Boards]
+      summary: Update board title
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:
+                  type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BoardEnvelope"
+    delete:
+      tags: [Boards]
+      summary: Delete a board (cascades lists/cards)
+      responses:
+        "204":
+          description: No Content
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /boards/{boardId}/lists:
+    parameters:
+      - $ref: "#/components/parameters/BoardId"
+    post:
+      tags: [Lists]
+      summary: Create a list on a board
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:
+                  type: string
+                order:
+                  type: number
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListEnvelope"
+    get:
+      tags: [Lists]
+      summary: List lists on a board
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Sort"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListCollectionEnvelope"
+
+  /lists/{listId}:
+    parameters:
+      - $ref: "#/components/parameters/ListId"
+    get:
+      tags: [Lists]
+      summary: Get a single list
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListEnvelope"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Lists]
+      summary: Update title and/or order (reorder)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                order:
+                  type: number
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListEnvelope"
+    delete:
+      tags: [Lists]
+      summary: Delete a list (cascades cards)
+      responses:
+        "204":
+          description: No Content
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /lists/{listId}/cards:
+    parameters:
+      - $ref: "#/components/parameters/ListId"
+    post:
+      tags: [Cards]
+      summary: Create a card in a list
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                order:
+                  type: number
+                assignees:
+                  type: array
+                  items:
+                    type: string
+                labels:
+                  type: array
+                  items:
+                    type: string
+                checklist:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      text:
+                        type: string
+                      done:
+                        type: boolean
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CardEnvelope"
+    get:
+      tags: [Cards]
+      summary: List cards in a list
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Sort"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CardCollectionEnvelope"
+
+  /cards/{cardId}:
+    parameters:
+      - $ref: "#/components/parameters/CardId"
+    get:
+      tags: [Cards]
+      summary: Get a single card
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CardEnvelope"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Cards]
+      summary: Update content and/or move (listId + order)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                order:
+                  type: number
+                listId:
+                  type: string
+                assignees:
+                  type: array
+                  items:
+                    type: string
+                labels:
+                  type: array
+                  items:
+                    type: string
+                checklist:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      text:
+                        type: string
+                      done:
+                        type: boolean
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CardEnvelope"
+    delete:
+      tags: [Cards]
+      summary: Delete a card
+      responses:
+        "204":
+          description: No Content
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 1
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        default: 20
+    Sort:
+      name: sort
+      in: query
+      schema:
+        type: string
+    WorkspaceId:
+      name: workspaceId
+      in: path
+      required: true
+      schema:
+        type: string
+    BoardId:
+      name: boardId
+      in: path
+      required: true
+      schema:
+        type: string
+    ListId:
+      name: listId
+      in: path
+      required: true
+      schema:
+        type: string
+    CardId:
+      name: cardId
+      in: path
+      required: true
+      schema:
+        type: string
+
+  responses:
+    Unauthenticated:
+      description: Missing or invalid access token
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    NotFound:
+      description: Resource not found
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    ValidationError:
+      description: Request body failed validation
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Conflict:
+      description: Resource state conflict
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+
+  schemas:
+    Problem:
+      type: object
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+
+    WorkspaceMember:
+      type: object
+      properties:
+        userId:
+          type: string
+        role:
+          type: string
+          enum: [Admin, Member]
+
+    Workspace:
+      type: object
+      properties:
+        _id:
+          type: string
+        name:
+          type: string
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkspaceMember"
+        createdAt:
+          type: string
+          format: date-time
+
+    Board:
+      type: object
+      properties:
+        _id:
+          type: string
+        workspaceId:
+          type: string
+        title:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    List:
+      type: object
+      properties:
+        _id:
+          type: string
+        boardId:
+          type: string
+        title:
+          type: string
+        order:
+          type: number
+
+    ChecklistItem:
+      type: object
+      properties:
+        text:
+          type: string
+        done:
+          type: boolean
+
+    Card:
+      type: object
+      properties:
+        _id:
+          type: string
+        listId:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        order:
+          type: number
+        assignees:
+          type: array
+          items:
+            type: string
+        labels:
+          type: array
+          items:
+            type: string
+        checklist:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChecklistItem"
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        totalPages:
+          type: integer
+
+    WorkspaceEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: "#/components/schemas/Workspace"
+
+    WorkspaceCollectionEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Workspace"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+
+    BoardEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: "#/components/schemas/Board"
+
+    BoardCollectionEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Board"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+
+    ListEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: "#/components/schemas/List"
+
+    ListCollectionEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/List"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+
+    CardEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: "#/components/schemas/Card"
+
+    CardCollectionEnvelope:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Card"
+        pagination:
+          $ref: "#/components/schemas/Pagination"

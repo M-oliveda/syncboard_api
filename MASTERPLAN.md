@@ -763,9 +763,9 @@ Development.
 
 ### Phase 1 — Stateless REST API
 
-- [ ] Build CRUD for Workspaces, Boards, Lists, Cards over MongoDB
-- [ ] Implement fractional/LexoRank reorder logic (`utils/reorder.ts`)
-- [ ] Exercise every endpoint via Swagger UI/Postman before any UI exists
+- [x] Build CRUD for Workspaces, Boards, Lists, Cards over MongoDB
+- [x] Implement fractional/LexoRank reorder logic (`utils/reorder.ts`)
+- [x] Exercise every endpoint via Swagger UI/Postman before any UI exists
 
 ### Phase 2 — Auth Hardening (Passport.js)
 

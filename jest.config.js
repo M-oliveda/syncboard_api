@@ -5,14 +5,25 @@ export default {
     testEnvironment: "node",
     rootDir: ".",
     testMatch: ["<rootDir>/tests/unit/**/*.test.ts"],
+    setupFiles: ["dotenv/config"],
     transform: {
         "^.+\\.tsx?$": ["ts-jest", { useESM: true }],
     },
     moduleNameMapper: {
+        "^@/(.*)\\.js$": "<rootDir>/src/$1",
         "^(\\.{1,2}/.*)\\.js$": "$1",
-        "^@/(.*)$": "<rootDir>/src/$1",
     },
-    collectCoverageFrom: ["src/**/*.ts"],
+    // Route wiring (app.ts, routes/**) and the process entrypoint (index.ts) are
+    // exercised end-to-end by the integration suite, not unit tests — see
+    // README.md#test-structure.
+    collectCoverageFrom: [
+        "src/**/*.ts",
+        "!src/routes/**",
+        "!src/app.ts",
+        "!src/index.ts",
+        "!src/docs/**",
+        "!src/types/**",
+    ],
     coverageDirectory: "coverage/unit",
     coverageThreshold: {
         global: {
