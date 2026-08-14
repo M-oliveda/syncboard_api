@@ -33,6 +33,11 @@ jobs:
       REDIS_URL: redis://localhost:6379
       JWT_SECRET: ci-test-secret
       JWT_REFRESH_SECRET: ci-test-refresh-secret
+      # Higher than the production default (10) — the integration suite
+      # exercises many /auth/* calls against one shared app instance per
+      # test file, and the auth-specific limiter is already unit- and
+      # integration-tested in isolation with its own low override.
+      AUTH_RATE_LIMIT_MAX_REQUESTS: "1000"
 
     steps:
       - name: Checkout code
