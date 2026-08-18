@@ -1,9 +1,27 @@
-import { describe, test, expect, jest, afterEach } from "@jest/globals";
+import { describe, test, expect, jest, afterEach, beforeEach } from "@jest/globals";
 import request from "supertest";
-import { app } from "@/app.js";
-import { logger } from "@/utils/logger.js";
+import { mockFn } from "../helpers/mockFn.js";
+
+const send = mockFn();
+
+class MockResend {
+    emails = { send };
+}
+
+jest.unstable_mockModule("resend", () => ({ Resend: MockResend }));
+
+const { app } = await import("@/app.js");
 
 const uniqueEmail = () => `user-${Date.now()}-${Math.random()}@test.dev`;
+
+const extractUrl = (html: string): string => {
+    const match = html.match(/href="([^"]+)"/);
+    return (match as RegExpMatchArray)[1];
+};
+
+beforeEach(() => {
+    send.mockClear();
+});
 
 describe("Auth", () => {
     describe("POST /auth/register", () => {
@@ -19,6 +37,9 @@ describe("Auth", () => {
             expect(response.body.data.user.passwordHash).toBeUndefined();
             expect(response.body.data.accessToken).toEqual(expect.any(String));
             expect(response.body.data.refreshToken).toEqual(expect.any(String));
+            expect(send).toHaveBeenCalledTimes(1);
+            const [payload] = send.mock.calls[0] as [{ to: string }];
+            expect(payload.to).toBe(email);
         });
 
         test("rejects a duplicate email", async () => {
@@ -156,20 +177,18 @@ describe("Auth", () => {
                 .send({ email, password: "correct-password1" })
                 .expect(201);
 
-            const infoSpy = jest.spyOn(logger, "info");
+            send.mockClear();
 
             await request(app)
                 .post("/api/v1/auth/forgot-password")
                 .send({ email })
                 .expect(202);
 
-            const calls = infoSpy.mock.calls as unknown as [
-                string,
-                { email: string; resetUrl: string },
-            ][];
-            const call = calls.find((args) => args[1]?.email === email);
-            expect(call).toBeDefined();
-            const resetUrl = (call as (typeof calls)[number])[1].resetUrl;
+            expect(send).toHaveBeenCalledTimes(1);
+            const [payload] = send.mock.calls[0] as [{ to: string; html: string }];
+            expect(payload.to).toBe(email);
+
+            const resetUrl = extractUrl(payload.html);
             const token = new URL(resetUrl).searchParams.get("token") as string;
 
             await request(app)
@@ -186,8 +205,6 @@ describe("Auth", () => {
                 .post("/api/v1/auth/login")
                 .send({ email, password: "brand-new-password1" })
                 .expect(200);
-
-            infoSpy.mockRestore();
         });
 
         test("returns 202 for forgot-password even when the email is unknown", async () => {

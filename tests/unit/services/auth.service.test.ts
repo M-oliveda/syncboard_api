@@ -13,10 +13,12 @@ const UserModel = {
     findByIdAndUpdate: mockFn(),
 };
 const sendPasswordResetEmail = mockFn();
+const sendWelcomeEmail = mockFn();
 
 jest.unstable_mockModule("@/models/user.model.js", () => ({ UserModel }));
-jest.unstable_mockModule("@/services/passwordResetMailer.js", () => ({
+jest.unstable_mockModule("@/services/email.service.js", () => ({
     sendPasswordResetEmail,
+    sendWelcomeEmail,
 }));
 
 const authService = await import("@/services/auth.service.js");
@@ -70,6 +72,7 @@ describe("register", () => {
         expect(result.refreshToken).toEqual(expect.any(String));
         expect(doc.refreshTokenHash).toBe(hashToken(result.refreshToken));
         expect(doc.save).toHaveBeenCalledTimes(1);
+        expect(sendWelcomeEmail).toHaveBeenCalledWith("user@example.com");
     });
 });
 
