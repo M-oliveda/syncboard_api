@@ -15,12 +15,13 @@ Socket.io adapter, not for data storage.
 - Full architecture, schemas, and rationale: [`MASTERPLAN.md`](./MASTERPLAN.md)
 - Coding style and stack-specific conventions: [`AGENTS.md`](./AGENTS.md)
 
-Phases 0–4 are built: project scaffolding, the full REST API (routes/services/models for
+Phases 0–5 are built: project scaffolding, the full REST API (routes/services/models for
 auth, workspaces, boards, lists, cards), `passport-jwt` auth hardening, CI/CD
-(`ci.yml`/`deploy-dev.yml`/`deploy-staging.yml`/`deploy-prod.yml`), and the Socket.io
-real-time layer (`src/sockets/`) with the `@socket.io/redis-adapter`. Phase 5
-(transactional email via Resend/React Email) and Phase 6 (structured logging polish,
-OpenAPI/Swagger completion) are not built yet — see `MASTERPLAN.md` §12 for the
+(`ci.yml`/`deploy-dev.yml`/`deploy-staging.yml`/`deploy-prod.yml`), the Socket.io
+real-time layer (`src/sockets/`) with the `@socket.io/redis-adapter`, and transactional
+email via Resend + React Email (`src/emails/`, `src/services/email.service.ts`) wired
+into registration (welcome email) and password reset. Phase 6 (structured logging
+polish, OpenAPI/Swagger completion) is not built yet — see `MASTERPLAN.md` §12 for the
 authoritative, up-to-date phase checklist rather than relying on this paragraph, which
 will drift as phases complete. Treat `README.md`/`MASTERPLAN.md` as the target contract
 for anything not yet built; check what actually exists in the repo before assuming a
@@ -72,6 +73,9 @@ trivial, plan it.
   (`config/passport.ts`'s strategy callback, `sockets/index.ts`'s handshake middleware)
   is the one exception, and both already follow it: a direct `UserModel.findById` to
   resolve `req.user`/`socket.data.user`, not a business-logic query
+- Email delivery goes only through `email.service.ts` — no other module calls the Resend
+  SDK directly. Templates live in `src/emails/` as React components; never render or
+  send HTML email inline in a service
 - Each of development/staging/production has its own dedicated GCP project, service
   account, and GitHub Environment — never assume a deploy workflow shares
   infrastructure, secrets, or a GitHub Environment with another environment
