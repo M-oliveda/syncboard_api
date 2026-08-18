@@ -216,7 +216,8 @@ requestId → morgan(logger) → helmet → cors → rateLimit
 - Single multi-stage `Dockerfile` builds the production image; `docker-compose.yml` runs
   the local API + MongoDB + Redis stack for offline development only — it is not used to
   run the app itself in CI/CD
-- Images are pushed to Artifact Registry and deployed to Google Cloud Run with **Session
+- Images are pushed to the public Docker Hub repository
+  (`docker.io/moliveda/syncboard-api`) and deployed to Google Cloud Run with **Session
   Affinity enabled**
 - GitHub Actions deploys via Workload Identity Federation (OIDC) — no long-lived GCP
   service-account keys in CI
