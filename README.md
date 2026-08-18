@@ -645,23 +645,24 @@ service, independent from the frontend's Cloud Run service.
 ### GCP Infrastructure
 
 Each environment has a dedicated GCP project with its own service account, mirroring the
-setup used by [`syncboard_web`](https://github.com/m-oliveda/syncboard_web):
+setup used by [`syncboard_web`](https://github.com/m-oliveda/syncboard_web). Container
+images are not hosted on GCP at all — they're pushed to the public Docker Hub repository
+`docker.io/moliveda/syncboard-api`, which every environment's Cloud Run service pulls
+from directly:
 
 | Environment     | GCP Project ID                 | Service Account          |
 | --------------- | ------------------------------ | ------------------------ |
-| **Preview**     | `moliveda-gcloudprojects-prev` | `cicd-deployer-prev@...` |
 | **Development** | `moliveda-gcloudprojects-dev`  | `cicd-deployer-dev@...`  |
 | **Staging**     | `moliveda-gcloudprojects-stg`  | `cicd-deployer-stg@...`  |
 | **Production**  | `moliveda-gcloudprojects-prod` | `cicd-deployer-prod@...` |
 
 ### Deployment Strategy
 
-| Environment     | Branch       | Notes                                           |
-| --------------- | ------------ | ----------------------------------------------- |
-| **Preview**     | Pull request | Deployed on PR open/sync; torn down on PR close |
-| **Development** | `develop`    | Auto-deploy on push                             |
-| **Staging**     | `release/*`  | Pre-production validation                       |
-| **Production**  | `main`       | Manual dispatch                                 |
+| Environment     | Branch      | Notes                     |
+| --------------- | ----------- | ------------------------- |
+| **Development** | `develop`   | Auto-deploy on push       |
+| **Staging**     | `release/*` | Pre-production validation |
+| **Production**  | `main`      | Manual dispatch           |
 
 **Crucial Cloud Run setting:** enable **Session Affinity** on the API service so a
 WebSocket's initial HTTP handshake is pinned to a single instance for the life of the
@@ -676,33 +677,33 @@ no long-lived GCP service account keys are stored in CI:
 - **CI (every pull request** to `develop`, `release/**`, or `main`**):** install, lint,
   format check, type-check, build, then run the full test suite with coverage
   (`npm run test:coverage`) — the job fails if coverage is below 100%.
-- **Deploy Preview (on PR open/sync):** builds the Docker image, pushes to Artifact
-  Registry, deploys an ephemeral Cloud Run service named `syncboard-api-pr-<PR#>` in the
-  preview project, and comments the preview URL on the PR.
-- **Cleanup Preview (on PR close/merge):** deletes the `syncboard-api-pr-<PR#>` Cloud
-  Run service so ephemeral environments don't accumulate.
-- **Deploy Development:** builds the Docker image, pushes to Artifact Registry, deploys
-  to the `syncboard-api` Cloud Run service in the dev project with session affinity
-  enabled
-- **Deploy Staging:** same pipeline, targeting the staging Cloud Run project
-- **Deploy Production:** manual approval gate, then deploy to the production Cloud Run
-  project
+- **Deploy Development (on push to `develop`, after CI passes):** builds the Docker
+  image, pushes it to the public Docker Hub repository, and deploys to the
+  `syncboard-api` Cloud Run service in the dev project with session affinity enabled.
+  Chained from `ci.yml` as a reusable workflow (`deploy-dev.yml`) — it has no trigger of
+  its own.
+- **Deploy Staging (on push to `release/**`, after CI passes):** same pipeline,
+  targeting the staging Cloud Run project. Chained from `ci.yml` as a reusable workflow
+  (`deploy-staging.yml`).
+- **Deploy Production (manual dispatch only):** `deploy-prod.yml` reruns the full CI
+  test job on the dispatched ref (since manual dispatch bypasses `ci.yml`'s own
+  triggers), then deploys to the production Cloud Run project.
 
 Secrets are organized using **GitHub Environments** (`development`, `staging`,
 `production`), each scoped to its own `MONGO_URI`, `REDIS_URL`, `JWT_SECRET`, and
-`JWT_REFRESH_SECRET`.
+`JWT_REFRESH_SECRET`, plus the shared `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN` used to
+push the image to Docker Hub.
 
 ### Manual Deployment
 
 ```bash
 npm run build
 
-docker build -t syncboard-api .
-docker tag syncboard-api gcr.io/<project-id>/syncboard-api
-docker push gcr.io/<project-id>/syncboard-api
+docker build -t docker.io/moliveda/syncboard-api .
+docker push docker.io/moliveda/syncboard-api
 
 gcloud run deploy syncboard-api \
-  --image gcr.io/<project-id>/syncboard-api \
+  --image docker.io/moliveda/syncboard-api \
   --session-affinity \
   --set-env-vars MONGO_URI=...,REDIS_URL=...,JWT_SECRET=...
 ```

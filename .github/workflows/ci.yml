@@ -1,10 +1,14 @@
 # CI Workflow
 #
-# Runs on all pull requests to develop/release/main and pushes to develop/main.
+# Runs on all pull requests to develop/release/main and pushes to develop/release/main.
 # Validates code quality, runs the full test suite, and enforces the 100% coverage
-# gate (see MASTERPLAN.md §11.2). On pull requests, deploys a PR preview via the
-# reusable Deploy Preview workflow only after the test job passes — deploy-preview.yml
-# has no trigger of its own, so a preview can never deploy before (or without) CI.
+# gate (see MASTERPLAN.md §11.2). On a push (not a pull request), deploys to the
+# matching environment via a reusable workflow only after the test job passes:
+# develop -> deploy-dev.yml, release/** -> deploy-staging.yml. Neither reusable
+# workflow has a trigger of its own, so a deploy can never happen before (or without)
+# CI. Production is not deployed from here — see deploy-prod.yml, which is manually
+# dispatched and reuses this workflow's test job (via the workflow_call trigger below)
+# instead of duplicating it.
 
 name: CI
 
@@ -12,7 +16,8 @@ on:
   pull_request:
     branches: [develop, "release/**", main]
   push:
-    branches: [develop, main]
+    branches: [develop, "release/**", main]
+  workflow_call:
 
 jobs:
   test:
@@ -90,12 +95,20 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
-  deploy-preview:
-    if: github.event_name == 'pull_request'
+  deploy-dev:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
     needs: test
-    uses: ./.github/workflows/deploy-preview.yml
+    uses: ./.github/workflows/deploy-dev.yml
     secrets: inherit
     permissions:
       contents: read
       id-token: write
-      pull-requests: write
+
+  deploy-staging:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
+    needs: test
+    uses: ./.github/workflows/deploy-staging.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
