@@ -1,13 +1,18 @@
 import "dotenv/config";
+import http from "node:http";
 import { env } from "@/config/env.js";
 import { connectDb } from "@/config/db.js";
 import { app } from "@/app.js";
+import { createSocketServer } from "@/sockets/index.js";
 import { logger } from "@/utils/logger.js";
 
 const bootstrap = async (): Promise<void> => {
     await connectDb();
 
-    app.listen(env.PORT, () => {
+    const httpServer = http.createServer(app);
+    createSocketServer(httpServer);
+
+    httpServer.listen(env.PORT, () => {
         logger.info(`SyncBoard API listening on port ${env.PORT}`);
     });
 };

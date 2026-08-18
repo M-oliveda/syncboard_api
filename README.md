@@ -421,12 +421,18 @@ app.use("/api/v1/docs", swaggerUi.serve, swaggerUi.setup(v1Spec));
 
 ## WebSocket Events
 
-| Event                 | Direction       | Payload                                                   |
-| --------------------- | --------------- | --------------------------------------------------------- |
-| `board:join`          | Client → Server | `{ boardId, userId, userMeta }`                           |
-| `board:user-presence` | Server → Client | `{ boardId, activeUsers: [{ userId, name, avatarUrl }] }` |
-| `card:moved`          | Client → Server | `{ cardId, sourceListId, targetListId, newOrder }`        |
-| `card:updated`        | Server → Client | Updated card document, broadcast to the board's Room      |
+| Event                 | Direction       | Payload                                              |
+| --------------------- | --------------- | ---------------------------------------------------- |
+| `board:join`          | Client → Server | `{ boardId }`                                        |
+| `board:user-presence` | Server → Client | `{ boardId, activeUsers: [{ userId, email }] }`      |
+| `card:moved`          | Client → Server | `{ cardId, sourceListId, targetListId, newOrder }`   |
+| `card:updated`        | Server → Client | Updated card document, broadcast to the board's Room |
+
+`board:join`'s `boardId` is the only trusted input — identity comes from the JWT
+presented at the socket handshake, never from the payload. `activeUsers` currently
+exposes `email` only; `name`/`avatarUrl` will be added once a user-profile field exists.
+`list:reordered` is not yet implemented (no dedicated REST reorder endpoint exists to
+mirror — see [`MASTERPLAN.md` §7.3](./MASTERPLAN.md#73-event-contract)).
 
 Connection flow, room strategy, and the Redis adapter setup are documented in
 [`MASTERPLAN.md`](./MASTERPLAN.md#7-real-time-layer).

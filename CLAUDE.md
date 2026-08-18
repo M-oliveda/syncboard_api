@@ -15,14 +15,16 @@ Socket.io adapter, not for data storage.
 - Full architecture, schemas, and rationale: [`MASTERPLAN.md`](./MASTERPLAN.md)
 - Coding style and stack-specific conventions: [`AGENTS.md`](./AGENTS.md)
 
-Phase 0 scaffolding is in place: `package.json`, `tsconfig.json`, ESLint/Prettier/Jest
-config, `docker-compose.yml` (local API + MongoDB + Redis), `Dockerfile`, and the
-`ci.yml`/`deploy-dev.yml`/`deploy-staging.yml`/`deploy-prod.yml` GitHub Actions
-workflows. `src/` still only has a placeholder entrypoint — the actual
-routes/services/models/sockets described in `README.md`/`MASTERPLAN.md` haven't been
-built yet. Treat those documents as the target contract for application code you write,
-not as a description of code already present; check what actually exists in the repo
-before assuming a file or script is there.
+Phases 0–4 are built: project scaffolding, the full REST API (routes/services/models for
+auth, workspaces, boards, lists, cards), `passport-jwt` auth hardening, CI/CD
+(`ci.yml`/`deploy-dev.yml`/`deploy-staging.yml`/`deploy-prod.yml`), and the Socket.io
+real-time layer (`src/sockets/`) with the `@socket.io/redis-adapter`. Phase 5
+(transactional email via Resend/React Email) and Phase 6 (structured logging polish,
+OpenAPI/Swagger completion) are not built yet — see `MASTERPLAN.md` §12 for the
+authoritative, up-to-date phase checklist rather than relying on this paragraph, which
+will drift as phases complete. Treat `README.md`/`MASTERPLAN.md` as the target contract
+for anything not yet built; check what actually exists in the repo before assuming a
+file or script is there.
 
 ## Mandatory: Generate a Coding Plan First
 
@@ -59,9 +61,17 @@ trivial, plan it.
 - Socket.io broadcasts go through `@socket.io/redis-adapter` — never assume a single
   Cloud Run instance; Session Affinity must stay enabled on the Cloud Run service
 - Redis is the Socket.io Pub/Sub adapter only — never use it for persistence
-- Auth is the `passport-jwt` strategy — don't hand-roll JWT-verification middleware
-- Only `services/*.service.ts` files import Mongoose models directly — routes and
-  controllers never query a model directly
+- Auth is the `passport-jwt` strategy — don't hand-roll JWT-verification middleware for
+  HTTP routes. `src/sockets/index.ts`'s handshake middleware is a deliberate, documented
+  exception: `passport-jwt`'s `JwtStrategy` is built around Express's req/res cycle and
+  has no clean way to run against a bare handshake token, so it verifies the JWT
+  directly via `jsonwebtoken` instead — don't try to force `passport-jwt` in here
+  without solving that mismatch first
+- Only `services/*.service.ts` files import Mongoose models directly for business logic
+  — routes and controllers never query a model directly. Identity-verification code
+  (`config/passport.ts`'s strategy callback, `sockets/index.ts`'s handshake middleware)
+  is the one exception, and both already follow it: a direct `UserModel.findById` to
+  resolve `req.user`/`socket.data.user`, not a business-logic query
 - Each of development/staging/production has its own dedicated GCP project, service
   account, and GitHub Environment — never assume a deploy workflow shares
   infrastructure, secrets, or a GitHub Environment with another environment

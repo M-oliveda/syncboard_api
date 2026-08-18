@@ -4,6 +4,7 @@ const EnvSchema = z.object({
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
     PORT: z.coerce.number().int().positive().default(4000),
     MONGO_URI: z.string().min(1, "MONGO_URI is required"),
+    REDIS_URL: z.string().min(1, "REDIS_URL is required"),
     JWT_SECRET: z.string().min(1, "JWT_SECRET is required"),
     JWT_EXPIRES_IN: z.string().default("15m"),
     JWT_REFRESH_SECRET: z.string().min(1, "JWT_REFRESH_SECRET is required"),
