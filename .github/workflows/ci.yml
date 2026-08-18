@@ -38,6 +38,8 @@ jobs:
       REDIS_URL: redis://localhost:6379
       JWT_SECRET: ci-test-secret
       JWT_REFRESH_SECRET: ci-test-refresh-secret
+      RESEND_API_KEY: ci-test-resend-key
+      EMAIL_FROM: "SyncBoard <no-reply@syncboard.dev>"
       # Higher than the production default (10) — the integration suite
       # exercises many /auth/* calls against one shared app instance per
       # test file, and the auth-specific limiter is already unit- and
