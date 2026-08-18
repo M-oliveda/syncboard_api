@@ -428,13 +428,13 @@ instance — no application code needs to know how many instances exist.
 
 ### 7.3 Event Contract
 
-| Event                 | Direction       | Payload                                                   | Notes                                           |
-| --------------------- | --------------- | --------------------------------------------------------- | ----------------------------------------------- |
-| `board:join`          | Client → Server | `{ boardId, userId, userMeta }`                           | Joins the board Room                            |
-| `board:user-presence` | Server → Client | `{ boardId, activeUsers: [{ userId, name, avatarUrl }] }` | Broadcast on join/leave                         |
-| `card:moved`          | Client → Server | `{ cardId, sourceListId, targetListId, newOrder }`        | Server persists before broadcasting             |
-| `card:updated`        | Server → Client | Full updated card document                                | Broadcast to the board's Room, including sender |
-| `list:reordered`      | Server → Client | `{ listId, newOrder }`                                    | Mirrors the REST reorder endpoint               |
+| Event                 | Direction       | Payload                                            | Notes                                                                                                                                       |
+| --------------------- | --------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `board:join`          | Client → Server | `{ boardId }`                                      | Joins the board Room. `userId` is always derived from the authenticated socket, never trusted from the payload — same rule as §8.3 for REST |
+| `board:user-presence` | Server → Client | `{ boardId, activeUsers: [{ userId, email }] }`    | Broadcast on join/leave. `name`/`avatarUrl` will be added once a user-profile field exists on `User` — not implemented yet                  |
+| `card:moved`          | Client → Server | `{ cardId, sourceListId, targetListId, newOrder }` | Server persists before broadcasting                                                                                                         |
+| `card:updated`        | Server → Client | Full updated card document                         | Broadcast to the board's Room, including sender                                                                                             |
+| `list:reordered`      | Server → Client | `{ listId, newOrder }`                             | Not yet implemented — no dedicated REST reorder endpoint exists to mirror; reordering lives inside `PATCH /lists/:listId`                   |
 
 ### 7.4 Session Affinity (Cloud Run)
 
@@ -794,10 +794,10 @@ that need to ship through it, not after:
 
 ### Phase 4 — Real-Time Layer
 
-- [ ] Add Socket.io and implement `board:join` + presence tracking
-- [ ] Implement `card:moved` → persist → `card:updated` broadcast cycle within a single
+- [x] Add Socket.io and implement `board:join` + presence tracking
+- [x] Implement `card:moved` → persist → `card:updated` broadcast cycle within a single
       instance first (no Redis yet) to validate the event contract
-- [ ] Add the `@socket.io/redis-adapter` for cross-instance fan-out
+- [x] Add the `@socket.io/redis-adapter` for cross-instance fan-out
 
 ### Phase 5 — Transactional Email (Resend + React Email)
 
