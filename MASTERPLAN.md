@@ -349,7 +349,7 @@ interface ApiError {
 
 | Method | Path                                              | Auth | Description                                      |
 | :----- | :------------------------------------------------ | :--- | :----------------------------------------------- |
-| POST   | `/api/v1/auth/register`                           | No   | Create account                                   |
+| POST   | `/api/v1/auth/register`                           | No   | Create account (triggers a welcome email)        |
 | POST   | `/api/v1/auth/login`                              | No   | Issue access + refresh JWT                       |
 | POST   | `/api/v1/auth/refresh`                            | No   | Exchange refresh token for a new access token    |
 | POST   | `/api/v1/auth/logout`                             | Yes  | Revoke the current refresh token                 |
@@ -514,8 +514,8 @@ horizontally-scaled, session-affinity-only instances (no server-side session sto
 
 ### 8.5 Email Delivery (Resend + React Email)
 
-- `src/emails/` holds transactional templates authored as React components (e.g.
-  `PasswordResetEmail.tsx`, `WelcomeEmail.tsx`) using `@react-email/components`.
+- `src/emails/` holds transactional templates authored as React components
+  (`PasswordResetEmail.tsx`, `WelcomeEmail.tsx`) using `@react-email/components`.
 - `email.service.ts` renders a template to HTML (`@react-email/render`) and hands it to
   the `resend` SDK, initialized once with `RESEND_API_KEY`:
 
@@ -524,6 +524,7 @@ horizontally-scaled, session-affinity-only instances (no server-side session sto
 import { Resend } from "resend";
 import { render } from "@react-email/render";
 import { PasswordResetEmail } from "@/emails/PasswordResetEmail";
+import { WelcomeEmail } from "@/emails/WelcomeEmail";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -536,10 +537,21 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string) {
     html,
   });
 }
+
+export async function sendWelcomeEmail(to: string) {
+  const html = await render(WelcomeEmail({ email: to }));
+  await resend.emails.send({
+    from: process.env.EMAIL_FROM!,
+    to,
+    subject: "Welcome to SyncBoard",
+    html,
+  });
+}
 ```
 
 - Only `auth.service.ts` calls into `email.service.ts` — no other service sends email
-  directly, keeping delivery logic and provider config in one place.
+  directly, keeping delivery logic and provider config in one place. `register()` calls
+  `sendWelcomeEmail` and `forgotPassword()` calls `sendPasswordResetEmail`.
 
 ---
 
@@ -747,6 +759,7 @@ REDIS_URL
 JWT_SECRET
 JWT_REFRESH_SECRET
 RESEND_API_KEY
+EMAIL_FROM
 ```
 
 Authentication to GCP uses Workload Identity Federation — no long-lived service account
@@ -801,9 +814,10 @@ that need to ship through it, not after:
 
 ### Phase 5 — Transactional Email (Resend + React Email)
 
-- [ ] Build React Email templates in `src/emails/` (password reset, welcome)
-- [ ] Implement `email.service.ts` (Resend client + template rendering)
-- [ ] Wire `auth.service.ts` to send the password-reset email on request
+- [x] Build React Email templates in `src/emails/` (password reset, welcome)
+- [x] Implement `email.service.ts` (Resend client + template rendering)
+- [x] Wire `auth.service.ts` to send the password-reset email on request
+- [x] Wire `auth.service.ts` to send a welcome email on registration
 
 ### Phase 6 — Observability & Docs
 

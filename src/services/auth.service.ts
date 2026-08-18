@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 import { env } from "@/config/env.js";
 import { UserModel } from "@/models/user.model.js";
 import { UnauthenticatedError, ValidationError } from "@/utils/errors.js";
-import { sendPasswordResetEmail } from "@/services/passwordResetMailer.js";
+import { sendPasswordResetEmail, sendWelcomeEmail } from "@/services/email.service.js";
 
 const PASSWORD_HASH_COST = 12;
 
@@ -42,6 +42,8 @@ export const register = async (email: string, password: string) => {
     const { accessToken, refreshToken } = issueTokenPair(user._id.toString());
     user.refreshTokenHash = hashToken(refreshToken);
     await user.save();
+
+    await sendWelcomeEmail(user.email);
 
     return { user, accessToken, refreshToken };
 };
