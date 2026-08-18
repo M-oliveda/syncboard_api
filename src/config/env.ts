@@ -9,6 +9,8 @@ const EnvSchema = z.object({
     JWT_EXPIRES_IN: z.string().default("15m"),
     JWT_REFRESH_SECRET: z.string().min(1, "JWT_REFRESH_SECRET is required"),
     JWT_REFRESH_EXPIRES_IN: z.string().default("7d"),
+    RESEND_API_KEY: z.string().min(1, "RESEND_API_KEY is required"),
+    EMAIL_FROM: z.string().min(1, "EMAIL_FROM is required"),
     PASSWORD_RESET_TOKEN_EXPIRES_IN_MS: z.coerce
         .number()
         .int()
