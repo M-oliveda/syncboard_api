@@ -350,9 +350,9 @@ interface ApiError {
 | Method | Path                                              | Auth | Description                                      |
 | :----- | :------------------------------------------------ | :--- | :----------------------------------------------- |
 | POST   | `/api/v1/auth/register`                           | No   | Create account (triggers a welcome email)        |
-| POST   | `/api/v1/auth/login`                              | No   | Issue access + refresh JWT                       |
-| POST   | `/api/v1/auth/refresh`                            | No   | Exchange refresh token for a new access token    |
-| POST   | `/api/v1/auth/logout`                             | Yes  | Revoke the current refresh token                 |
+| POST   | `/api/v1/auth/login`                              | No   | Issue an access token; sets the refresh cookie   |
+| POST   | `/api/v1/auth/refresh`                            | No   | Rotate the refresh cookie for a new access token |
+| POST   | `/api/v1/auth/logout`                             | Yes  | Revoke the refresh token and clear its cookie    |
 | POST   | `/api/v1/auth/forgot-password`                    | No   | Trigger reset email                              |
 | POST   | `/api/v1/auth/reset-password`                     | No   | Complete reset                                   |
 | POST   | `/api/v1/workspaces`                              | Yes  | Create workspace                                 |
@@ -378,7 +378,10 @@ interface ApiError {
 | GET    | `/api/v1/cards/:cardId`                           | Yes  | Get a single card                                |
 | PATCH  | `/api/v1/cards/:cardId`                           | Yes  | Update content and/or move (`listId` + `order`)  |
 | DELETE | `/api/v1/cards/:cardId`                           | Yes  | Delete card                                      |
-| GET    | `/api/v1/cards/:cardId/activity`                  | Yes  | Paginated activity log for a card                |
+| GET    | `/api/v1/cards/:cardId/activity`                  | Yes  | **Not yet implemented** — see below              |
+
+No `Activity` model, service, or route exists yet — the row above documents the target
+contract only, matching how §7.3 already flags `list:reordered` as not yet implemented.
 
 All `GET` collection endpoints accept `?page=`, `?limit=`, `?sort=` query params (see
 [README §Collection Query Parameters](./README.md#collection-query-parameters)).
@@ -483,8 +486,12 @@ horizontally-scaled, session-affinity-only instances (no server-side session sto
   and during the Socket.io handshake. Signed with `jsonwebtoken`; verified by the
   `passport-jwt` strategy above.
 - **Refresh token:** longer-lived (`7d`), used only to mint a new access token via a
-  dedicated refresh endpoint; stored client-side in an httpOnly cookie or secure storage
-  (frontend's responsibility, documented in `web/MASTERPLAN.md`).
+  dedicated refresh endpoint. Set by `register`/`login`/`refresh` as an **HttpOnly**
+  cookie scoped to `/api/v1/auth` (`src/utils/authCookie.ts`) — never returned in a JSON
+  response body, never read or stored by the frontend in JS. `POST /auth/refresh` reads
+  it from the cookie automatically (via `cookie-parser`); the request needs no body.
+  `sameSite` is `"none"`+`secure` in production (the web and API Cloud Run services are
+  separate origins) and `"lax"` in development.
 - Tokens are signed with distinct secrets (`JWT_SECRET`, `JWT_REFRESH_SECRET`) so a
   leaked access-token secret cannot be used to forge refresh tokens.
 
