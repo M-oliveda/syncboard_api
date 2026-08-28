@@ -524,6 +524,26 @@ docker compose up --build
 - **Base URL:** `http://localhost:4000/api/v1`
 - **Swagger UI:** `http://localhost:4000/api/v1/docs`
 
+### Local seed data
+
+For convenience while developing locally you can populate a small dataset (three users,
+workspaces, boards, lists and cards) with:
+
+```bash
+npm run seed
+# Or when running inside the Compose `api` container:
+docker compose exec api npm run seed
+```
+
+Seeded accounts (email / password):
+
+- `ada.admin@syncboard.dev` / `SeedAda1!`
+- `sam.member@syncboard.dev` / `SeedSam2!`
+- `riley.solo@syncboard.dev` / `SeedRiley3!`
+
+The seeder is idempotent and will only replace the known seed users/workspaces on
+re-run; it refuses to run when `NODE_ENV=production`.
+
 ### Test the API
 
 ```bash
