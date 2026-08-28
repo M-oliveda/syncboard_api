@@ -19,6 +19,15 @@ const extractUrl = (html: string): string => {
     return (match as RegExpMatchArray)[1];
 };
 
+/** Pulls the `refreshToken=...` cookie off a response so it can be replayed on a
+ * follow-up request via `.set("Cookie", ...)` — supertest doesn't carry cookies
+ * between independent `request(app)` calls automatically. */
+const extractRefreshCookie = (response: request.Response): string => {
+    const setCookie = response.headers["set-cookie"] as unknown as string[];
+    const cookie = setCookie.find((entry) => entry.startsWith("refreshToken="));
+    return (cookie as string).split(";")[0];
+};
+
 beforeEach(() => {
     send.mockClear();
 });
@@ -36,7 +45,8 @@ describe("Auth", () => {
             expect(response.body.data.user.email).toBe(email);
             expect(response.body.data.user.passwordHash).toBeUndefined();
             expect(response.body.data.accessToken).toEqual(expect.any(String));
-            expect(response.body.data.refreshToken).toEqual(expect.any(String));
+            expect(response.body.data.refreshToken).toBeUndefined();
+            expect(extractRefreshCookie(response)).toMatch(/^refreshToken=.+/);
             expect(send).toHaveBeenCalledTimes(1);
             const [payload] = send.mock.calls[0] as [{ to: string }];
             expect(payload.to).toBe(email);
@@ -113,54 +123,63 @@ describe("Auth", () => {
                 .post("/api/v1/auth/register")
                 .send({ email, password: "correct-password1" })
                 .expect(201);
-            const originalRefreshToken = registered.body.data.refreshToken as string;
+            const originalCookie = extractRefreshCookie(registered);
 
             const refreshed = await request(app)
                 .post("/api/v1/auth/refresh")
-                .send({ refreshToken: originalRefreshToken })
+                .set("Cookie", originalCookie)
                 .expect(200);
+            const rotatedCookie = extractRefreshCookie(refreshed);
 
-            expect(refreshed.body.data.refreshToken).not.toBe(originalRefreshToken);
+            expect(refreshed.body.data.refreshToken).toBeUndefined();
+            expect(refreshed.body.data.accessToken).toEqual(expect.any(String));
+            expect(rotatedCookie).not.toBe(originalCookie);
 
             await request(app)
                 .post("/api/v1/auth/refresh")
-                .send({ refreshToken: originalRefreshToken })
+                .set("Cookie", originalCookie)
                 .expect(401);
 
             await request(app)
                 .post("/api/v1/auth/refresh")
-                .send({ refreshToken: refreshed.body.data.refreshToken })
+                .set("Cookie", rotatedCookie)
                 .expect(200);
         });
 
-        test("rejects a malformed refresh token", async () => {
+        test("rejects a request with no refresh token cookie", async () => {
+            await request(app).post("/api/v1/auth/refresh").expect(401);
+        });
+
+        test("rejects a malformed refresh token cookie", async () => {
             await request(app)
                 .post("/api/v1/auth/refresh")
-                .send({ refreshToken: "not-a-jwt" })
+                .set("Cookie", "refreshToken=not-a-jwt")
                 .expect(401);
         });
     });
 
     describe("POST /auth/logout", () => {
-        test("revokes the refresh token", async () => {
+        test("revokes the refresh token and clears the cookie", async () => {
             const email = uniqueEmail();
             const registered = await request(app)
                 .post("/api/v1/auth/register")
                 .send({ email, password: "correct-password1" })
                 .expect(201);
-            const { accessToken, refreshToken } = registered.body.data as {
-                accessToken: string;
-                refreshToken: string;
-            };
+            const { accessToken } = registered.body.data as { accessToken: string };
+            const refreshCookie = extractRefreshCookie(registered);
 
-            await request(app)
+            const loggedOut = await request(app)
                 .post("/api/v1/auth/logout")
                 .set("Authorization", `Bearer ${accessToken}`)
                 .expect(204);
 
+            expect(extractRefreshCookie(loggedOut)).toMatch(
+                /^refreshToken=;|^refreshToken=$/,
+            );
+
             await request(app)
                 .post("/api/v1/auth/refresh")
-                .send({ refreshToken })
+                .set("Cookie", refreshCookie)
                 .expect(401);
         });
 
