@@ -47,35 +47,28 @@ Skip planning only for genuinely trivial edits: fixing a typo, a doc-only change
 one-line config tweak, or a routine dependency bump. If it's ambiguous whether a task is
 trivial, plan it.
 
-## Architectural Constraints (do not violate)
+## Coding Conventions
 
-- Routes are versioned under `/api/v<n>`; a breaking change ships as a new version
-  prefix — never mutate an existing version's contract
-- No verb-suffixed "action" routes (no `/reorder`, `/move`) — reordering/moving is a
-  `PATCH` of `order`/`listId` on the resource
-- All errors flow through the centralized `errorHandler` and come back as RFC 7807
-  (`application/problem+json`) — no route formats its own error response
-- Every mutation body is validated with a Zod schema before it reaches the service layer
-- `order` is fractional/LexoRank-style — never bulk re-index sibling documents on a move
-- Authorization always re-derives `workspaceId` from the resource hierarchy server-side
-  — a client-supplied `workspaceId` is never trusted
-- Socket.io broadcasts go through `@socket.io/redis-adapter` — never assume a single
-  Cloud Run instance; Session Affinity must stay enabled on the Cloud Run service
-- Redis is the Socket.io Pub/Sub adapter only — never use it for persistence
-- Auth is the `passport-jwt` strategy — don't hand-roll JWT-verification middleware for
-  HTTP routes. `src/sockets/index.ts`'s handshake middleware is a deliberate, documented
-  exception: `passport-jwt`'s `JwtStrategy` is built around Express's req/res cycle and
-  has no clean way to run against a bare handshake token, so it verifies the JWT
-  directly via `jsonwebtoken` instead — don't try to force `passport-jwt` in here
-  without solving that mismatch first
-- Only `services/*.service.ts` files import Mongoose models directly for business logic
-  — routes and controllers never query a model directly. Identity-verification code
-  (`config/passport.ts`'s strategy callback, `sockets/index.ts`'s handshake middleware)
-  is the one exception, and both already follow it: a direct `UserModel.findById` to
-  resolve `req.user`/`socket.data.user`, not a business-logic query
-- Email delivery goes only through `email.service.ts` — no other module calls the Resend
-  SDK directly. Templates live in `src/emails/` as React components; never render or
-  send HTML email inline in a service
+All stack-specific style, layering, and workflow rules — Express/routing, Mongoose, Zod,
+Socket.io, auth, testing, git/commit format, Docker — live in
+[`AGENTS.md`](./AGENTS.md). Treat every rule there as a binding constraint for this
+repo, equivalent to the rest of this file, not just descriptive style guidance. Read it
+before making any change; do not restate its rules here.
+
+The items below are constraints `AGENTS.md` doesn't cover, or exceptions to its rules
+that are easy to miss:
+
+- Only `services/*.service.ts` files import Mongoose models directly for business logic.
+  The exceptions are identity-verification code (`config/passport.ts`'s strategy
+  callback, `sockets/index.ts`'s handshake middleware — both do a direct
+  `UserModel.findById` to resolve `req.user`/`socket.data.user`, not a business-logic
+  query) and `scripts/seed.ts` (a local dev-only script, see `AGENTS.md`'s "One-off
+  Scripts" section)
+- `src/sockets/index.ts`'s handshake middleware is a deliberate, documented exception to
+  the passport-jwt rule: `passport-jwt`'s `JwtStrategy` is built around Express's
+  req/res cycle and has no clean way to run against a bare handshake token, so it
+  verifies the JWT directly via `jsonwebtoken` instead — don't try to force
+  `passport-jwt` in here without solving that mismatch first
 - Each of development/staging/production has its own dedicated GCP project, service
   account, and GitHub Environment — never assume a deploy workflow shares
   infrastructure, secrets, or a GitHub Environment with another environment
@@ -94,6 +87,7 @@ Per `README.md#development`, matching the scripts actually defined in `package.j
 
 ```bash
 npm run dev                # Start with hot reload
+npm run seed                # Populate local MongoDB with dev seed data (refuses on production)
 npm run build               # Compile TypeScript
 npm run start                 # Run compiled build
 
@@ -109,23 +103,6 @@ npm run format                   # Prettier — write
 npm run format:check            # Prettier check
 npm run type-check              # tsc --noEmit
 ```
-
-## Conventions
-
-- Commit messages: Gitmoji format, `:emoji: Message` — uppercase start, ≤50 chars,
-  enforced by `.husky/commit-msg`
-- Pre-commit (`.husky/pre-commit`) runs `lint`, `format:check`, `type-check`, and `test`
-  — fix the underlying failure rather than bypassing with `--no-verify`
-- Full style rules (JS/TS, Express layering, Mongoose, Zod, Docker) live in
-  [`AGENTS.md`](./AGENTS.md) — follow them for all code in this repo
-
-## Testing Expectations
-
-- Jest + Supertest; CI enforces 100% coverage (statements/branches/functions/lines)
-- New endpoints/services/socket handlers need both happy-path and error-path tests
-  before a change is considered done
-- Mock the Redis adapter when testing Socket.io handlers; don't require a live Redis
-  instance for unit tests
 
 ## Explicit Non-Goals
 

@@ -100,6 +100,8 @@ src/
 ├── emails/          # React Email templates
 ├── utils/           # Pure helpers (reorder.ts, logger.ts)
 └── docs/v<n>/        # OpenAPI 3.0 spec per API version
+
+scripts/             # Standalone dev-only scripts run via tsx (e.g. seed.ts)
 ```
 
 - Keep `src/index.ts` limited to bootstrapping (connect DB/Redis, then `listen`);
@@ -151,6 +153,22 @@ requestId → morgan(logger) → helmet → cors → rateLimit
 - Use Mongoose middleware hooks (`pre`/`post`) only for side effects (e.g. writing an
   `Activity` entry), never to hide core business logic that belongs in a service
 - Avoid `.lean()` unless a specific read path is measurably performance-critical
+
+### One-off Scripts (`scripts/`)
+
+- `scripts/` holds standalone, dev-only scripts run directly with `tsx` (e.g.
+  `npm run seed` → `scripts/seed.ts`) — they are not part of the deployed app, so
+  (unlike `src/`) they may import Mongoose models directly instead of going through
+  `services/*.service.ts`
+- Reuse existing config/util modules (`config/db.ts`'s `connectDb`/`disconnectDb`,
+  `config/env.ts`'s `env`, `utils/logger.ts`, `utils/reorder.ts`) rather than
+  reimplementing connection, env-validation, or ordering logic
+- Any script that mutates data must guard with an `env.NODE_ENV === "production"` check
+  and `process.exit(1)` before connecting, the way `scripts/seed.ts` does — these
+  scripts are for local/dev use only and must refuse to run against production
+- A destructive/reseeding script should be idempotent (clear its own previously-seeded
+  data by a stable identifier before recreating it) rather than appending duplicates on
+  every run
 
 ### Authentication & Authorization (Passport.js)
 
