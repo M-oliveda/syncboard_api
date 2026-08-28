@@ -6,6 +6,7 @@ export interface FakeQuery<T> extends PromiseLike<T> {
     skip: jest.Mock;
     limit: jest.Mock;
     select: jest.Mock;
+    populate: jest.Mock;
 }
 
 export const createFakeQuery = <T>(result: T): FakeQuery<T> => {
@@ -14,6 +15,7 @@ export const createFakeQuery = <T>(result: T): FakeQuery<T> => {
     query.skip = jest.fn(() => query);
     query.limit = jest.fn(() => query);
     query.select = jest.fn(() => query);
+    query.populate = jest.fn(() => query);
     query.then = ((onFulfilled, onRejected) =>
         Promise.resolve(result).then(
             onFulfilled,

@@ -5,16 +5,20 @@ import { authRateLimit } from "@/middleware/rateLimit.js";
 import { asyncHandler } from "@/utils/asyncHandler.js";
 import { currentUserId } from "@/utils/currentUser.js";
 import { successResponse } from "@/utils/response.js";
+import { UnauthenticatedError } from "@/utils/errors.js";
+import {
+    clearRefreshCookie,
+    getRefreshCookie,
+    setRefreshCookie,
+} from "@/utils/authCookie.js";
 import * as authService from "@/services/auth.service.js";
 import {
     ForgotPasswordSchema,
     LoginSchema,
-    RefreshSchema,
     RegisterSchema,
     ResetPasswordSchema,
     type ForgotPasswordInput,
     type LoginInput,
-    type RefreshInput,
     type RegisterInput,
     type ResetPasswordInput,
 } from "@/routes/v1/auth.schema.js";
@@ -28,8 +32,12 @@ authRouter.post(
     validate(RegisterSchema),
     asyncHandler(async (req, res) => {
         const { email, password } = req.body as RegisterInput;
-        const result = await authService.register(email, password);
-        res.status(201).json(successResponse(result));
+        const { user, accessToken, refreshToken } = await authService.register(
+            email,
+            password,
+        );
+        setRefreshCookie(res, refreshToken);
+        res.status(201).json(successResponse({ user, accessToken }));
     }),
 );
 
@@ -38,18 +46,27 @@ authRouter.post(
     validate(LoginSchema),
     asyncHandler(async (req, res) => {
         const { email, password } = req.body as LoginInput;
-        const result = await authService.login(email, password);
-        res.json(successResponse(result));
+        const { user, accessToken, refreshToken } = await authService.login(
+            email,
+            password,
+        );
+        setRefreshCookie(res, refreshToken);
+        res.json(successResponse({ user, accessToken }));
     }),
 );
 
 authRouter.post(
     "/refresh",
-    validate(RefreshSchema),
     asyncHandler(async (req, res) => {
-        const { refreshToken } = req.body as RefreshInput;
-        const result = await authService.refresh(refreshToken);
-        res.json(successResponse(result));
+        const refreshToken = getRefreshCookie(req);
+
+        if (!refreshToken) {
+            throw new UnauthenticatedError("No refresh token cookie present");
+        }
+
+        const tokens = await authService.refresh(refreshToken);
+        setRefreshCookie(res, tokens.refreshToken);
+        res.json(successResponse({ accessToken: tokens.accessToken }));
     }),
 );
 
@@ -80,6 +97,7 @@ authRouter.post(
     requireAuth,
     asyncHandler(async (req, res) => {
         await authService.logout(currentUserId(req));
+        clearRefreshCookie(res);
         res.status(204).send();
     }),
 );

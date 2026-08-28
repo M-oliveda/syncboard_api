@@ -20,7 +20,14 @@ auth, workspaces, boards, lists, cards), `passport-jwt` auth hardening, CI/CD
 (`ci.yml`/`deploy-dev.yml`/`deploy-staging.yml`/`deploy-prod.yml`), the Socket.io
 real-time layer (`src/sockets/`) with the `@socket.io/redis-adapter`, and transactional
 email via Resend + React Email (`src/emails/`, `src/services/email.service.ts`) wired
-into registration (welcome email) and password reset. Phase 6 (structured logging
+into registration (welcome email) and password reset. Refresh-token handling is
+implemented as a real HttpOnly cookie (`cookie-parser`, `src/utils/authCookie.ts`, CORS
+`credentials: true`) — not aspirational — and `Workspace.members.userId` is populated
+with the member's email on read paths (`workspace.service.ts`) so `syncboard_web`'s
+Members panel has something to render; the same field stays an unpopulated `ObjectId` on
+paths used for authorization (`assertWorkspaceAccess`/ `authz.ts`), which still needs
+raw `.toString()` comparisons. `GET /cards/:cardId/activity` is documented but **not
+implemented** — no `Activity` model/service/route exists. Phase 6 (structured logging
 polish, OpenAPI/Swagger completion) is not built yet — see `MASTERPLAN.md` §12 for the
 authoritative, up-to-date phase checklist rather than relying on this paragraph, which
 will drift as phases complete. Treat `README.md`/`MASTERPLAN.md` as the target contract

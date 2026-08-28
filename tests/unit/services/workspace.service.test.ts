@@ -33,6 +33,9 @@ const buildWorkspaceDoc = (overrides: Record<string, unknown> = {}) => ({
     save: jest.fn(async function (this: unknown) {
         return this;
     }),
+    populate: jest.fn(async function (this: unknown) {
+        return this;
+    }),
     ...overrides,
 });
 
@@ -57,7 +60,8 @@ describe("createWorkspace", () => {
 describe("listWorkspacesForUser", () => {
     test("returns items, pagination, and total for the user's workspaces", async () => {
         const items = [buildWorkspaceDoc()];
-        WorkspaceModel.find.mockReturnValueOnce(createFakeQuery(items));
+        const query = createFakeQuery(items);
+        WorkspaceModel.find.mockReturnValueOnce(query);
         WorkspaceModel.countDocuments.mockResolvedValueOnce(1);
 
         const result = await workspaceService.listWorkspacesForUser(
@@ -66,6 +70,7 @@ describe("listWorkspacesForUser", () => {
         );
 
         expect(result).toEqual({ items, page: 1, limit: 20, total: 1 });
+        expect(query.populate).toHaveBeenCalledWith("members.userId", "email");
     });
 });
 
@@ -85,6 +90,28 @@ describe("getWorkspaceById", () => {
         await expect(workspaceService.getWorkspaceById("missing")).rejects.toThrow(
             NotFoundError,
         );
+    });
+});
+
+describe("getWorkspaceWithPopulatedMembers", () => {
+    test("returns the workspace with members.userId populated", async () => {
+        const doc = buildWorkspaceDoc();
+        WorkspaceModel.findById.mockResolvedValueOnce(doc);
+
+        const result = await workspaceService.getWorkspaceWithPopulatedMembers(
+            doc._id.toString(),
+        );
+
+        expect(result).toBe(doc);
+        expect(doc.populate).toHaveBeenCalledWith("members.userId", "email");
+    });
+
+    test("throws NotFoundError when missing", async () => {
+        WorkspaceModel.findById.mockResolvedValueOnce(null);
+
+        await expect(
+            workspaceService.getWorkspaceWithPopulatedMembers("missing"),
+        ).rejects.toThrow(NotFoundError);
     });
 });
 

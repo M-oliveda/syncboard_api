@@ -26,11 +26,29 @@ export const listWorkspacesForUser = async (
     const filter = { "members.userId": new Types.ObjectId(userId) };
 
     const [items, total] = await Promise.all([
-        WorkspaceModel.find(filter).sort(sort).skip(skip).limit(limit),
+        WorkspaceModel.find(filter)
+            .sort(sort)
+            .skip(skip)
+            .limit(limit)
+            .populate("members.userId", "email"),
         WorkspaceModel.countDocuments(filter),
     ]);
 
     return { items, page, limit, total };
+};
+
+/** Read-only, populated fetch for responses that need member emails. Never used by
+ * assertWorkspaceAccess/authz — those need members[].userId as a raw ObjectId so
+ * `.toString()` comparisons keep working. */
+export const getWorkspaceWithPopulatedMembers = async (workspaceId: string) => {
+    const workspace = await WorkspaceModel.findById(workspaceId);
+
+    if (!workspace) {
+        throw new NotFoundError(`Workspace ${workspaceId} not found`);
+    }
+
+    await workspace.populate("members.userId", "email");
+    return workspace;
 };
 
 /** Raw fetch — no authorization check. Only call directly when the caller
@@ -114,6 +132,7 @@ export const addMember = async (
 
     workspace.members.push({ userId: new Types.ObjectId(targetUserId), role });
     await workspace.save();
+    await workspace.populate("members.userId", "email");
     return workspace;
 };
 
@@ -136,6 +155,7 @@ export const updateMemberRole = async (
 
     member.role = role;
     await workspace.save();
+    await workspace.populate("members.userId", "email");
     return workspace;
 };
 
@@ -159,5 +179,6 @@ export const removeMember = async (
 
     workspace.members.splice(memberIndex, 1);
     await workspace.save();
+    await workspace.populate("members.userId", "email");
     return workspace;
 };

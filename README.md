@@ -232,9 +232,9 @@ the whole API.
 
 ```text
 POST /api/v1/auth/register         # Create account
-POST /api/v1/auth/login            # Issue access + refresh JWT
-POST /api/v1/auth/refresh          # Exchange a valid refresh token for a new access token
-POST /api/v1/auth/logout           # Revoke the current refresh token
+POST /api/v1/auth/login            # Issue an access token; sets the refresh token as an HttpOnly cookie
+POST /api/v1/auth/refresh          # Rotate the refresh token cookie for a new access token (no body)
+POST /api/v1/auth/logout           # Revoke the current refresh token and clear its cookie
 POST /api/v1/auth/forgot-password  # Trigger reset email
 POST /api/v1/auth/reset-password   # Complete reset with token
 ```
@@ -364,6 +364,10 @@ Every `GET` collection endpoint (`/workspaces`, `/boards`, `/lists`, `/cards`,
 ```
 
 ### Activity
+
+**Not yet implemented** — no `Activity` model, service, or route exists yet, unlike
+every other resource in this section. The endpoint below documents the target contract,
+not something you can call today.
 
 | Method | Path                             | Description                       |
 | :----- | :------------------------------- | :-------------------------------- |
