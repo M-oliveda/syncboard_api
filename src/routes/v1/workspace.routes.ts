@@ -48,9 +48,12 @@ workspaceRouter.get(
 workspaceRouter.get(
     "/:workspaceId",
     asyncHandler(async (req, res) => {
-        const { workspace } = await workspaceService.assertWorkspaceAccess(
+        await workspaceService.assertWorkspaceAccess(
             req.params.workspaceId,
             currentUserId(req),
+        );
+        const workspace = await workspaceService.getWorkspaceWithPopulatedMembers(
+            req.params.workspaceId,
         );
         res.json(successResponse(workspace));
     }),

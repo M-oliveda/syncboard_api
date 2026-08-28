@@ -156,9 +156,11 @@ describe("Workspaces", () => {
                 .send({ role: "Admin" })
                 .expect(200);
             const member = updated.body.data.members.find(
-                (m: { userId: string }) => m.userId === otherUser._id.toString(),
+                (m: { userId: { _id: string; email: string } }) =>
+                    m.userId._id === otherUser._id.toString(),
             );
             expect(member.role).toBe("Admin");
+            expect(member.userId.email).toBe(otherUser.email);
 
             const removed = await request(app)
                 .delete(
