@@ -828,6 +828,6 @@ that need to ship through it, not after:
 
 ### Phase 6 — Observability & Docs
 
-- [ ] Structured logging (Winston + Morgan) with request correlation IDs
-- [ ] Complete the OpenAPI spec and mount Swagger UI at `/api/v1/docs`
-- [ ] Centralize RFC 7807 error handling across all routes
+- [x] Structured logging (Winston + Morgan) with request correlation IDs
+- [x] Complete the OpenAPI spec and mount Swagger UI at `/api/v1/docs`
+- [x] Centralize RFC 7807 error handling across all routes
