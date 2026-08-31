@@ -1,15 +1,16 @@
 import mongoose from "mongoose";
 import type { NextFunction, Request, Response } from "express";
-import { AppError, ConflictError, ValidationError } from "@/utils/errors.js";
+import {
+    AppError,
+    ConflictError,
+    InternalServerError,
+    ValidationError,
+    toProblemPayload,
+    type ProblemPayload,
+} from "@/utils/errors.js";
 import { logger } from "@/utils/logger.js";
 
-const ERROR_BASE_URI = "https://syncboard.moliveda.dev/errors";
-
-interface ProblemDetails {
-    type: string;
-    title: string;
-    status: number;
-    detail: string;
+interface ProblemDetails extends ProblemPayload {
     instance: string;
 }
 
@@ -39,11 +40,7 @@ const toAppError = (error: unknown): AppError => {
         return new ConflictError("A resource with that value already exists");
     }
 
-    return new (class extends AppError {
-        readonly status = 500;
-        readonly type = `${ERROR_BASE_URI}/internal-error`;
-        readonly title = "Internal Server Error";
-    })("An unexpected error occurred");
+    return new InternalServerError("An unexpected error occurred");
 };
 
 export const errorHandler = (
@@ -59,10 +56,7 @@ export const errorHandler = (
     }
 
     const problem: ProblemDetails = {
-        type: appError.type,
-        title: appError.title,
-        status: appError.status,
-        detail: appError.detail,
+        ...toProblemPayload(appError),
         instance: req.originalUrl,
     };
 
