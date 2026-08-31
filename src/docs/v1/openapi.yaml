@@ -9,7 +9,10 @@ info:
     token minted via /auth/register or /auth/login. Workspace/board/list/card
     routes additionally require the caller to be a member (Admin or Member)
     of the resource's workspace; a subset of workspace routes require the
-    Admin role specifically.
+    Admin role specifically. /auth/register, /auth/login, and /auth/refresh
+    also set an HttpOnly `refreshToken` cookie (scoped to /api/v1/auth) as a
+    side effect — it is never present in a JSON response body — and
+    /auth/logout clears it.
 servers:
   - url: /api/v1
 security:
@@ -86,27 +89,19 @@ paths:
   /auth/refresh:
     post:
       tags: [Auth]
-      summary: Rotate a refresh token for a new access + refresh token pair
+      summary: Rotate the refresh cookie for a new access token
+      description: >
+        Reads the refresh token from the HttpOnly `refreshToken` cookie (scoped to
+        `/api/v1/auth`, set by register/login/refresh and cleared by logout) — the
+        request takes no body. Rotates the cookie and returns a new access token.
       security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [refreshToken]
-              properties:
-                refreshToken:
-                  type: string
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TokenPairEnvelope"
-        "400":
-          $ref: "#/components/responses/ValidationError"
+                $ref: "#/components/schemas/AccessTokenEnvelope"
         "401":
           $ref: "#/components/responses/Unauthenticated"
 
@@ -790,16 +785,11 @@ components:
           type: string
           format: date-time
 
-    TokenPair:
-      type: object
-      properties:
-        accessToken:
-          type: string
-        refreshToken:
-          type: string
-
     AuthEnvelope:
       type: object
+      description: >
+        The response body never includes the refresh token — it is set separately as an
+        HttpOnly `refreshToken` cookie (see the `/auth/refresh` note above).
       properties:
         success:
           type: boolean
@@ -810,16 +800,17 @@ components:
               $ref: "#/components/schemas/User"
             accessToken:
               type: string
-            refreshToken:
-              type: string
 
-    TokenPairEnvelope:
+    AccessTokenEnvelope:
       type: object
       properties:
         success:
           type: boolean
         data:
-          $ref: "#/components/schemas/TokenPair"
+          type: object
+          properties:
+            accessToken:
+              type: string
 
     WorkspaceMember:
       type: object

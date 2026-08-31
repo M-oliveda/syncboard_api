@@ -1,4 +1,4 @@
-const ERROR_BASE_URI = "https://syncboard.dev/errors";
+export const ERROR_BASE_URI = "https://syncboard.dev/errors";
 
 export abstract class AppError extends Error {
     abstract readonly status: number;
@@ -43,3 +43,23 @@ export class ConflictError extends AppError {
     readonly type = `${ERROR_BASE_URI}/conflict`;
     readonly title = "Conflict";
 }
+
+export class InternalServerError extends AppError {
+    readonly status = 500;
+    readonly type = `${ERROR_BASE_URI}/internal-error`;
+    readonly title = "Internal Server Error";
+}
+
+export interface ProblemPayload {
+    type: string;
+    title: string;
+    status: number;
+    detail: string;
+}
+
+export const toProblemPayload = (error: AppError): ProblemPayload => ({
+    type: error.type,
+    title: error.title,
+    status: error.status,
+    detail: error.detail,
+});

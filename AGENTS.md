@@ -4,9 +4,91 @@ This repo is **SyncBoard API**: an Express.js + TypeScript REST API and Socket.i
 real-time layer, backed by MongoDB Atlas (Mongoose) and Redis Cloud (Socket.io Pub/Sub
 adapter only), containerized and deployed to Google Cloud Run. Product/API details live
 in [`README.md`](./README.md); full architectural rationale lives in
-[`MASTERPLAN.md`](./MASTERPLAN.md). This file is the coding-style contract for anyone
-(human or agent) writing code in this repo — it intentionally covers only the stack this
-project actually uses.
+[`MASTERPLAN.md`](./MASTERPLAN.md). This file is the single instructions file for anyone
+(human or agent) working in this repo — coding style, stack-specific conventions, and
+project/workflow rules — and is what `CLAUDE.md` (a symlink to this file) resolves to.
+It intentionally covers only the stack this project actually uses; instructions here
+override default agent behavior and must be followed exactly.
+
+## Project Snapshot
+
+Phases 0–6 are built: project scaffolding, the full REST API (routes/services/models for
+auth, workspaces, boards, lists, cards), `passport-jwt` auth hardening, CI/CD
+(`ci.yml`/`deploy-dev.yml`/`deploy-staging.yml`/`deploy-prod.yml`), the Socket.io
+real-time layer (`src/sockets/`) with the `@socket.io/redis-adapter`, transactional
+email via Resend + React Email (`src/emails/`, `src/services/email.service.ts`) wired
+into registration (welcome email) and password reset, and observability/docs polish:
+structured HTTP access logging with request-correlation IDs
+(`src/middleware/httpLogger.ts`, threading `req.id` through Winston's `logger.http`), a
+completed `src/docs/v1/openapi.yaml` served via Swagger UI at `/api/v1/docs`, and RFC
+7807 error handling centralized in `src/utils/errors.ts`
+(`toProblemPayload`/`InternalServerError`), reused by both
+`src/middleware/errorHandler.ts` and `src/sockets/socketError.ts`. Refresh-token
+handling is implemented as a real HttpOnly cookie (`cookie-parser`,
+`src/utils/authCookie.ts`, CORS `credentials: true`) — not aspirational — and
+`Workspace.members.userId` is populated with the member's email on read paths
+(`workspace.service.ts`) so `syncboard_web`'s Members panel has something to render; the
+same field stays an unpopulated `ObjectId` on paths used for authorization
+(`assertWorkspaceAccess`/`authz.ts`), which still needs raw `.toString()` comparisons.
+`GET /cards/:cardId/activity` is documented but **not implemented** — no `Activity`
+model/service/route exists. See `MASTERPLAN.md` §12 for the authoritative, up-to-date
+phase checklist rather than relying on this paragraph, which will drift as phases
+complete. Treat `README.md`/`MASTERPLAN.md` as the target contract for anything not yet
+built; check what actually exists in the repo before assuming a file or script is there.
+
+## Mandatory: Generate a Coding Plan First
+
+**Before implementing any new feature, fix, or change of medium or higher complexity,
+generate a coding plan and get it in front of the user before writing code.** Use plan
+mode (`EnterPlanMode`/`ExitPlanMode`) for this — don't just describe the plan in prose
+and start editing.
+
+A change counts as medium-or-higher complexity if it does **any** of the following:
+
+- Adds, removes, or changes a REST endpoint or Socket.io event
+- Touches more than one architectural layer (e.g. route + service + model)
+- Changes a Mongoose schema, index, or the reorder/fractional-ordering logic
+- Touches auth, authorization, password/token handling, or CORS/rate-limit config
+- Changes CI/CD, Docker, or deployment configuration
+- Is a bug fix that isn't a one-line/obvious change
+
+Skip planning only for genuinely trivial edits: fixing a typo, a doc-only change, a
+one-line config tweak, or a routine dependency bump. If it's ambiguous whether a task is
+trivial, plan it.
+
+## Commands
+
+Per `README.md#development`, matching the scripts actually defined in `package.json`:
+
+```bash
+npm run dev                # Start with hot reload
+npm run seed                # Populate local MongoDB with dev seed data (refuses on production)
+npm run build               # Compile TypeScript
+npm run start                 # Run compiled build
+
+npm run test                  # All tests
+npm run test:unit             # Unit tests only
+npm run test:integration      # Integration tests only (Supertest)
+npm run test:watch            # Watch mode for TDD
+npm run test:coverage         # Coverage report — CI fails below 100%
+
+npm run lint                   # ESLint
+npm run lint:fix                # Fix linting issues
+npm run format                   # Prettier — write
+npm run format:check            # Prettier check
+npm run type-check              # tsc --noEmit
+```
+
+## Explicit Non-Goals
+
+Per `MASTERPLAN.md` §2.4 — do not introduce these without an explicit user request:
+
+- File/attachment storage (no S3/GCS)
+- Offline-first sync or CRDTs (last-write-wins is intentional)
+- Multi-region active-active deployment
+- GraphQL (REST + WebSockets only)
+
+---
 
 ## JavaScript/TypeScript Language & Style
 
@@ -92,7 +174,7 @@ src/
 ├── index.ts        # Server entrypoint (listen) — separate from app construction
 ├── app.ts          # Express app construction/middleware wiring — no listen() here
 ├── config/         # Env, DB, Redis, Socket.io, Passport setup
-├── middleware/      # auth, validate, rateLimit, errorHandler
+├── middleware/      # auth, validate, rateLimit, httpLogger, errorHandler
 ├── routes/v1/       # express.Router() per resource, mounted under /api/v1
 ├── services/        # Business logic + the only layer that imports Mongoose models
 ├── models/          # Mongoose schemas
@@ -139,8 +221,13 @@ requestId → morgan(logger) → helmet → cors → rateLimit
 
 ### Database Integration (MongoDB Atlas + Mongoose — not SQL/Prisma)
 
-- Only `services/*.service.ts` files import and query Mongoose models — routes and
-  controllers never touch a model directly (keeps DB access swappable/testable)
+- Only `services/*.service.ts` files import and query Mongoose models for business logic
+  — routes and controllers never touch a model directly (keeps DB access
+  swappable/testable). The exceptions are identity-verification code
+  (`config/passport.ts`'s strategy callback, `sockets/index.ts`'s handshake middleware —
+  both do a direct `UserModel.findById` to resolve `req.user`/`socket.data.user`, not a
+  business-logic query) and `scripts/seed.ts` (a local dev-only script, see "One-off
+  Scripts" below)
 - Collection/model names are `PascalCase` singular (`User`, `Workspace`, `Board`); field
   names are `camelCase` (`workspaceId`, `createdAt`), matching the schemas in
   `MASTERPLAN.md` §5.2
@@ -174,6 +261,11 @@ requestId → morgan(logger) → helmet → cors → rateLimit
 
 - Auth is a `passport-jwt` strategy (`src/config/passport.ts`), not a hand-rolled bearer
   check. Protected routes use `passport.authenticate("jwt", { session: false })`
+- `src/sockets/index.ts`'s handshake middleware is a deliberate, documented exception to
+  the passport-jwt rule: `passport-jwt`'s `JwtStrategy` is built around Express's
+  req/res cycle and has no clean way to run against a bare handshake token, so it
+  verifies the JWT directly via `jsonwebtoken` instead — don't try to force
+  `passport-jwt` in here without solving that mismatch first
 - Access tokens are short-lived (`15m`); refresh tokens are longer-lived (`7d`) and
   signed with a **separate** secret (`JWT_SECRET` vs `JWT_REFRESH_SECRET`)
 - Passwords are hashed with `bcryptjs` — never logged, never returned in a response
@@ -203,6 +295,9 @@ requestId → morgan(logger) → helmet → cors → rateLimit
 ### Logging
 
 - Winston for structured JSON application logs, Morgan for HTTP request logs
+  (`src/middleware/httpLogger.ts` — a custom Morgan format function that logs structured
+  fields via `logger.http()` instead of a preformatted string, so Winston's own dev/prod
+  format renders every log line consistently)
 - Include a request-correlation ID (`requestId`) on every log line
 - Never log secrets, tokens, or password hashes
 
@@ -212,6 +307,9 @@ requestId → morgan(logger) → helmet → cors → rateLimit
 - `email.service.ts` is the only module that renders a template and calls the `resend`
   SDK — no other service sends email directly
 - The Resend client is initialized once at module load, not per request
+- Only `auth.service.ts` calls into `email.service.ts` — no other service sends email
+  directly, keeping delivery logic and provider config in one place. `register()` calls
+  `sendWelcomeEmail` and `forgotPassword()` calls `sendPasswordResetEmail`
 
 ### API Documentation
 
@@ -235,8 +333,17 @@ requestId → morgan(logger) → helmet → cors → rateLimit
   the local API + MongoDB + Redis stack for offline development only — it is not used to
   run the app itself in CI/CD
 - Images are pushed to the public Docker Hub repository
-  (`docker.io/moliveda/syncboard-api`) and deployed to Google Cloud Run with **Session
-  Affinity enabled**
+  (`docker.io/moliveda/syncboard-api`), **not** Google Artifact Registry — don't
+  reintroduce Artifact Registry push/pull steps — and deployed to Google Cloud Run with
+  **Session Affinity enabled**
+- Each of development/staging/production has its own dedicated GCP project, service
+  account, and GitHub Environment — never assume a deploy workflow shares
+  infrastructure, secrets, or a GitHub Environment with another environment
+- `deploy-dev.yml`/`deploy-staging.yml` are `workflow_call`-only reusable workflows
+  chained from `ci.yml` after its `test` job passes — never give them a `push` or
+  `pull_request` trigger of their own. `deploy-prod.yml` is the sole `workflow_dispatch`
+  entry point and always reruns `ci.yml`'s `test` job (via `workflow_call`) before
+  deploying, since manual dispatch bypasses `ci.yml`'s own triggers
 - GitHub Actions deploys via Workload Identity Federation (OIDC) — no long-lived GCP
   service-account keys in CI
 - Secrets are scoped per GitHub Environment (`development`, `staging`, `production`);

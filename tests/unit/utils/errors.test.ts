@@ -2,6 +2,7 @@ import { describe, test, expect } from "@jest/globals";
 import {
     ConflictError,
     ForbiddenError,
+    InternalServerError,
     NotFoundError,
     UnauthenticatedError,
     ValidationError,
@@ -41,5 +42,12 @@ describe("domain error classes", () => {
         const error = new ForbiddenError("Admin role required");
         expect(error.status).toBe(403);
         expect(error.type).toBe("https://syncboard.dev/errors/forbidden");
+    });
+
+    test("InternalServerError carries a 500 status", () => {
+        const error = new InternalServerError("An unexpected error occurred");
+        expect(error.status).toBe(500);
+        expect(error.type).toBe("https://syncboard.dev/errors/internal-error");
+        expect(error.title).toBe("Internal Server Error");
     });
 });
