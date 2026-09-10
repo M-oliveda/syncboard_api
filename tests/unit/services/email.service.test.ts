@@ -45,6 +45,17 @@ describe("sendPasswordResetEmail", () => {
             sendPasswordResetEmail("user@example.com", "http://localhost:5173/reset"),
         ).rejects.toThrow("Resend API error");
     });
+
+    test("throws when Resend returns an error payload", async () => {
+        send.mockResolvedValueOnce({
+            data: null,
+            error: { message: "bounce" },
+        });
+
+        await expect(
+            sendPasswordResetEmail("user@example.com", "http://localhost:5173/reset"),
+        ).rejects.toThrow("Failed to send password reset email: bounce");
+    });
 });
 
 describe("sendWelcomeEmail", () => {
@@ -67,6 +78,17 @@ describe("sendWelcomeEmail", () => {
 
         await expect(sendWelcomeEmail("user@example.com")).rejects.toThrow(
             "Resend API error",
+        );
+    });
+
+    test("throws when Resend returns an error payload", async () => {
+        send.mockResolvedValueOnce({
+            data: null,
+            error: { message: "bounce" },
+        });
+
+        await expect(sendWelcomeEmail("user@example.com")).rejects.toThrow(
+            "Failed to send welcome email: bounce",
         );
     });
 });

@@ -3,6 +3,7 @@ import request from "supertest";
 import { mockFn } from "../helpers/mockFn.js";
 
 const send = mockFn();
+send.mockResolvedValue({ data: { id: "email-1" }, error: null });
 
 class MockResend {
     emails = { send };
@@ -30,6 +31,7 @@ const extractRefreshCookie = (response: request.Response): string => {
 
 beforeEach(() => {
     send.mockClear();
+    send.mockResolvedValue({ data: { id: "email-1" }, error: null });
 });
 
 describe("Auth", () => {

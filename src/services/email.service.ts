@@ -11,20 +11,28 @@ export const sendPasswordResetEmail = async (
     resetUrl: string,
 ): Promise<void> => {
     const html = await render(PasswordResetEmail({ resetUrl }));
-    await resend.emails.send({
+    const { error } = await resend.emails.send({
         from: env.EMAIL_FROM,
         to,
         subject: "Reset your SyncBoard password",
         html,
     });
+
+    if (error) {
+        throw new Error(`Failed to send password reset email: ${error.message}`);
+    }
 };
 
 export const sendWelcomeEmail = async (to: string): Promise<void> => {
     const html = await render(WelcomeEmail({ email: to }));
-    await resend.emails.send({
+    const { error } = await resend.emails.send({
         from: env.EMAIL_FROM,
         to,
         subject: "Welcome to SyncBoard",
         html,
     });
+
+    if (error) {
+        throw new Error(`Failed to send welcome email: ${error.message}`);
+    }
 };

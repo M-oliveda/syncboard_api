@@ -11,7 +11,7 @@ export default {
     maxWorkers: 1,
     // MongoDB may still be coming up (Compose healthcheck / Atlas handshake).
     testTimeout: 30000,
-    setupFiles: ["dotenv/config"],
+    setupFiles: ["dotenv/config", "<rootDir>/tests/setupEnv.ts"],
     setupFilesAfterEnv: ["<rootDir>/tests/setup.ts"],
     transform: {
         "^.+\\.tsx?$": ["ts-jest", { useESM: true }],
