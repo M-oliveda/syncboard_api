@@ -20,9 +20,13 @@ jest.unstable_mockModule("@/services/email.service.js", () => ({
     sendPasswordResetEmail,
     sendWelcomeEmail,
 }));
+jest.unstable_mockModule("@/utils/logger.js", () => ({
+    logger: { error: jest.fn(), info: jest.fn(), warn: jest.fn() },
+}));
 
 const authService = await import("@/services/auth.service.js");
 const { env } = await import("@/config/env.js");
+const { logger } = await import("@/utils/logger.js");
 const { UnauthenticatedError, ValidationError } = await import("@/utils/errors.js");
 
 const hashToken = (raw: string): string =>
@@ -73,6 +77,35 @@ describe("register", () => {
         expect(doc.refreshTokenHash).toBe(hashToken(result.refreshToken));
         expect(doc.save).toHaveBeenCalledTimes(1);
         expect(sendWelcomeEmail).toHaveBeenCalledWith("user@example.com");
+    });
+
+    test("still returns tokens when the welcome email fails with an Error", async () => {
+        const doc = buildUserDoc();
+        UserModel.create.mockResolvedValueOnce(doc);
+        sendWelcomeEmail.mockRejectedValueOnce(new Error("Resend down"));
+
+        const result = await authService.register(
+            "user@example.com",
+            "correct-password",
+        );
+
+        expect(result.user).toBe(doc);
+        expect(result.accessToken).toEqual(expect.any(String));
+        expect(logger.error).toHaveBeenCalledWith("Failed to send welcome email", {
+            error: "Resend down",
+        });
+    });
+
+    test("still returns tokens when the welcome email fails with a non-Error", async () => {
+        const doc = buildUserDoc();
+        UserModel.create.mockResolvedValueOnce(doc);
+        sendWelcomeEmail.mockRejectedValueOnce("transport timeout");
+
+        await authService.register("user@example.com", "correct-password");
+
+        expect(logger.error).toHaveBeenCalledWith("Failed to send welcome email", {
+            error: "transport timeout",
+        });
     });
 });
 
@@ -215,6 +248,31 @@ describe("forgotPassword", () => {
             authService.forgotPassword("nobody@example.com"),
         ).resolves.toBeUndefined();
         expect(sendPasswordResetEmail).not.toHaveBeenCalled();
+    });
+
+    test("swallows an Error from the reset email and still completes", async () => {
+        const doc = buildUserDoc();
+        UserModel.findOne.mockResolvedValueOnce(doc);
+        sendPasswordResetEmail.mockRejectedValueOnce(new Error("Resend down"));
+
+        await expect(authService.forgotPassword(doc.email)).resolves.toBeUndefined();
+        expect(logger.error).toHaveBeenCalledWith(
+            "Failed to send password reset email",
+            { error: "Resend down" },
+        );
+        expect(doc.save).toHaveBeenCalledTimes(1);
+    });
+
+    test("swallows a non-Error from the reset email and still completes", async () => {
+        const doc = buildUserDoc();
+        UserModel.findOne.mockResolvedValueOnce(doc);
+        sendPasswordResetEmail.mockRejectedValueOnce("transport timeout");
+
+        await expect(authService.forgotPassword(doc.email)).resolves.toBeUndefined();
+        expect(logger.error).toHaveBeenCalledWith(
+            "Failed to send password reset email",
+            { error: "transport timeout" },
+        );
     });
 });
 

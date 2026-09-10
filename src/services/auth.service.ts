@@ -5,6 +5,7 @@ import { env } from "@/config/env.js";
 import { UserModel } from "@/models/user.model.js";
 import { UnauthenticatedError, ValidationError } from "@/utils/errors.js";
 import { sendPasswordResetEmail, sendWelcomeEmail } from "@/services/email.service.js";
+import { logger } from "@/utils/logger.js";
 
 const PASSWORD_HASH_COST = 12;
 
@@ -43,7 +44,13 @@ export const register = async (email: string, password: string) => {
     user.refreshTokenHash = hashToken(refreshToken);
     await user.save();
 
-    await sendWelcomeEmail(user.email);
+    try {
+        await sendWelcomeEmail(user.email);
+    } catch (error) {
+        logger.error("Failed to send welcome email", {
+            error: error instanceof Error ? error.message : error,
+        });
+    }
 
     return { user, accessToken, refreshToken };
 };
@@ -100,7 +107,14 @@ export const forgotPassword = async (email: string): Promise<void> => {
     await user.save();
 
     const resetUrl = `${env.CORS_ORIGIN}/reset-password?token=${rawToken}`;
-    await sendPasswordResetEmail(user.email, resetUrl);
+
+    try {
+        await sendPasswordResetEmail(user.email, resetUrl);
+    } catch (error) {
+        logger.error("Failed to send password reset email", {
+            error: error instanceof Error ? error.message : error,
+        });
+    }
 };
 
 export const resetPassword = async (
