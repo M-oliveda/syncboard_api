@@ -17,7 +17,9 @@ auth, workspaces, boards, lists, cards), `passport-jwt` auth hardening, CI/CD
 (`ci.yml`/`deploy-dev.yml`/`deploy-staging.yml`/`deploy-prod.yml`), the Socket.io
 real-time layer (`src/sockets/`) with the `@socket.io/redis-adapter`, transactional
 email via Resend + React Email (`src/emails/`, `src/services/email.service.ts`) wired
-into registration (welcome email) and password reset, and observability/docs polish:
+into registration (welcome email) and password reset — `email.service.ts` throws on a
+Resend API error payload, but `auth.service.ts` catches and logs that failure rather
+than letting it fail registration or password reset — and observability/docs polish:
 structured HTTP access logging with request-correlation IDs
 (`src/middleware/httpLogger.ts`, threading `req.id` through Winston's `logger.http`), a
 completed `src/docs/v1/openapi.yaml` served via Swagger UI at `/api/v1/docs`, and RFC
@@ -310,6 +312,11 @@ requestId → morgan(logger) → helmet → cors → rateLimit
 - Only `auth.service.ts` calls into `email.service.ts` — no other service sends email
   directly, keeping delivery logic and provider config in one place. `register()` calls
   `sendWelcomeEmail` and `forgotPassword()` calls `sendPasswordResetEmail`
+- `email.service.ts` throws when the Resend SDK resolves with an `error` payload (it
+  doesn't reject on API errors) — treat that shape as a failure, not a success
+- `auth.service.ts` wraps both calls in `try/catch` and only logs via `logger.error` on
+  failure — a broken email provider must never block registration or password reset from
+  completing
 
 ### API Documentation
 
@@ -326,6 +333,11 @@ requestId → morgan(logger) → helmet → cors → rateLimit
   statements/branches/functions/lines — do not merge code that drops coverage
 - Test layout mirrors `src/`: `tests/unit/{services,middleware,sockets}`,
   `tests/integration/*.test.ts` (see `README.md#test-structure`)
+- Integration tests never share the local `syncboard` dev database: `tests/setupEnv.ts`
+  rewrites `MONGO_URI`'s database segment to `syncboard-test` before any test file
+  loads, `tests/setup.ts` wipes every collection in `afterEach`, and
+  `jest.integration.config.js` sets `maxWorkers: 1` since all integration files share
+  that one database/connection and would race each other's wipe otherwise
 
 ### Deployment
 
