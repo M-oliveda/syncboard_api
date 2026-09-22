@@ -1,6 +1,6 @@
 {
   "name": "syncboard-api",
-  "version": "0.1.0",
+  "version": "1.0.1",
   "description": "SyncBoard API — Express.js + TypeScript backend for a real-time collaborative Kanban board",
   "license": "GPL-2.0",
   "private": true,
