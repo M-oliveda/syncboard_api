@@ -1,0 +1,78 @@
+# Deploy Production Workflow
+#
+# Manually dispatched deploy to the standing `syncboard-api` Cloud Run service in the
+# Production GCP project. Production has its own dedicated GCP project and secrets
+# (see MASTERPLAN.md §11.0/§11.3), pulled from the `production` GitHub Environment
+# below.
+#
+# Unlike Development/Staging, this workflow is never chained from ci.yml — dispatching
+# it manually bypasses ci.yml's own triggers entirely, so the `test` job below reruns
+# the full lint/format/type-check/build/coverage gate (by reusing ci.yml as a
+# workflow_call) on the dispatched ref before `deploy-prod` is allowed to run.
+
+name: Deploy Production
+
+on:
+  workflow_dispatch:
+
+env:
+  REGION: us-central1
+  SERVICE: syncboard-api
+  IMAGE_REPOSITORY: docker.io/moliveda/syncboard-api
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
+  deploy-prod:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE_REPOSITORY }}:prod-${{ github.sha }}
+
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          service: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          image: ${{ env.IMAGE_REPOSITORY }}:prod-${{ github.sha }}
+          flags: "--session-affinity"
+          env_vars: |
+            NODE_ENV=production
+            MONGO_URI=${{ secrets.MONGO_URI }}
+            REDIS_URL=${{ secrets.REDIS_URL }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            JWT_REFRESH_SECRET=${{ secrets.JWT_REFRESH_SECRET }}
+            RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
+            EMAIL_FROM=${{ secrets.EMAIL_FROM }}
